@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07090f">
+  <title>Sector Intelligence // Spasiro</title>
+  <link rel="stylesheet" href="/stats.css">
+</head>
+<body>
+  <div class="stars" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="wordmark" href="/">SPASIRO <span>ONLINE</span></a>
+    <div class="topActions"><span class="liveDot"></span> PUBLIC SECTOR DATA <a href="/">← BACK TO GAME</a></div>
+  </header>
+  <main class="shell">
+    <section class="intro">
+      <div class="eyebrow">FLEET COMMAND // INTELLIGENCE DIVISION</div>
+      <h1>PILOT <span>STATS</span></h1>
+      <p>Every pilot. Every sector. Track the names making history across the fleet.</p>
+    </section>
+    <section class="metrics" aria-label="Sector totals">
+      <article class="metric"><span>REGISTERED PILOTS</span><strong id="totalPilots">—</strong><small>IN THE ROSTER</small></article>
+      <article class="metric"><span>SECTOR SCORE</span><strong id="totalScore">—</strong><small>ALL TIME</small></article>
+      <article class="metric"><span>TAKEDOWNS</span><strong id="totalKills">—</strong><small>CONFIRMED</small></article>
+      <article class="metric"><span>SORTIES FLOWN</span><strong id="totalSorties">—</strong><small>FLEET WIDE</small></article>
+    </section>
+    <section class="roster">
+      <div class="rosterHeading">
+        <div><div class="eyebrow">LIVE ROSTER</div><h2>Fleet leaderboard</h2></div>
+        <button id="refresh" class="refresh" type="button">↻ <span>REFRESH</span></button>
+      </div>
+      <div class="filters">
+        <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Search pilot name or UID…" autocomplete="off"><kbd>CTRL K</kbd></label>
+        <span id="resultCount" class="resultCount">Loading pilots…</span>
+      </div>
+      <div class="tableWrap">
+        <table>
+          <thead><tr><th>RANK</th><th>PILOT</th><th>LEVEL</th><th>SCORE</th><th>TAKEDOWNS</th><th>SORTIES</th></tr></thead>
+          <tbody id="pilotRows"><tr><td colspan="6" class="empty">Connecting to command…</td></tr></tbody>
+        </table>
+      </div>
+      <div id="error" class="error" role="status"></div>
+      <footer><span>SPASIRO // CREATED BY VECTOR VIPER</span><span id="lastUpdated">—</span></footer>
+    </section>
+  </main>
+  <script src="/stats.js"></script>
+</body>
+</html>

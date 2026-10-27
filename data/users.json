@@ -1,0 +1,130 @@
+{
+  "hunter": {
+    "uid": "UID-93E9710BCB7B",
+    "username": "hunter",
+    "displayName": "Hunter",
+    "jet": "red",
+    "passwordHash": "03f33335478a692cf7630640da755c44e23a449df5823f65c506501e368169cf21aa287958276add68032de02ee42d0a3860845c6e33feae1346fa51389cf51f",
+    "salt": "93d72724ef628685fdef4644ec8d678e",
+    "score": 0,
+    "kills": 0,
+    "games": 1,
+    "coins": 0,
+    "upgrades": {
+      "speed": 0,
+      "armor": 0,
+      "weapon": 0
+    },
+    "createdAt": 1793077721633,
+    "inventory": [],
+    "spriteId": null,
+    "banned": false,
+    "suspendedUntil": 0,
+    "passwordReset": {
+      "salt": "fd22bbdeae6719cfe1a297c163d073b0",
+      "hash": "504d461af9e225cbebce2388d98b41c34cec2011e7da3fcf0be87f422b651306785daad2f001b59d228f714a1e225470b3aab0c2d0931ab5f0e96b326c7d0f9e",
+      "expiresAt": 1793086107365
+    },
+    "isModerator": false,
+    "friends": [],
+    "friendRequests": [],
+    "teamInvites": []
+  },
+  "cybershaodw": {
+    "uid": "UID-9FF55BFA69CD",
+    "username": "cybershaodw",
+    "displayName": "cybershaodw",
+    "jet": "red",
+    "passwordHash": "8874f0bd7d53e2b1388bd7571f717b6495a4f05b28dbd0f941a78c525f0f8d747676bf5a3f8acae8e8e700550890c98202bbb70a2550afcf5c9f581d0462d57b",
+    "salt": "a8528564b222692e0667323d485dcd88",
+    "score": 470,
+    "kills": 2,
+    "games": 23,
+    "coins": 120,
+    "upgrades": {
+      "speed": 2,
+      "armor": 0,
+      "weapon": 0
+    },
+    "createdAt": 1793077752997,
+    "jetColor": "#58d8ff",
+    "inventory": [],
+    "spriteId": null,
+    "banned": false,
+    "suspendedUntil": 0,
+    "isModerator": false,
+    "friends": [],
+    "friendRequests": [],
+    "teamInvites": []
+  },
+  "hunterintel": {
+    "uid": "UID-0823D8A0D2C9",
+    "username": "hunterintel",
+    "email": "ashfinafdrew@gmail.com",
+    "displayName": "Hunter-Intel",
+    "jet": "green",
+    "passwordHash": "b054fd47dc90b17bae24a11a29f701b4998fe745f3d05ac9fa10d001e03b7c7a697938d6d3b82d2d024110f740ec0356481cfdea24445bfc1d463f9840636fb9",
+    "salt": "cad61688dbc9bb299cb6f6b9c3621004",
+    "score": 2290,
+    "kills": 12,
+    "games": 46,
+    "coins": 1980,
+    "upgrades": {
+      "speed": 0,
+      "armor": 0,
+      "weapon": 0
+    },
+    "createdAt": 1793079187643,
+    "inventory": [
+      "a543e0524cb4fb3828",
+      "3363408b4445c261cc",
+      "98c878632eb2ef1497"
+    ],
+    "spriteId": "a543e0524cb4fb3828",
+    "banned": false,
+    "suspendedUntil": 0,
+    "isModerator": true,
+    "jetColor": "#ff5757",
+    "levelOverride": 1000,
+    "friends": [
+      "UID-9401DBB48881"
+    ],
+    "friendRequests": [],
+    "avatarUrl": "/uploads/profiles/UID-0823D8A0D2C9.jpg?v=1793093747027",
+    "teamInvites": [],
+    "flameColor": "#0400ff",
+    "teamId": "45bd007e582ad7aa"
+  },
+  "haaaaaj": {
+    "uid": "UID-9401DBB48881",
+    "username": "haaaaaj",
+    "email": "crosssquad53@gmail.com",
+    "displayName": "Haaaaaj",
+    "jet": "green",
+    "passwordHash": "12393fa54e5e12eba71a058f7cd9818af0080ec74d507d7c9ec0d54d183c05aab589c181659d5733893da7379857dc3da967b23b540a7dcbd4c2299d6673a32a",
+    "salt": "23bd9888ede447c8643cf8c2da82d9ce",
+    "score": 390,
+    "kills": 0,
+    "games": 35,
+    "coins": 445,
+    "upgrades": {
+      "speed": 0,
+      "armor": 0,
+      "weapon": 0
+    },
+    "inventory": [],
+    "spriteId": null,
+    "banned": false,
+    "suspendedUntil": 1793089305309,
+    "createdAt": 1793083902110,
+    "isModerator": false,
+    "jetColor": "#58d8ff",
+    "friends": [
+      "UID-0823D8A0D2C9"
+    ],
+    "friendRequests": [],
+    "avatarUrl": "/uploads/profiles/UID-9401DBB48881.jpg?v=1793093767197",
+    "teamInvites": [],
+    "teamId": "45bd007e582ad7aa"
+  }
+}

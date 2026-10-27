@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recover pilot account // Spasiro</title><link rel="stylesheet" href="/style.css"></head>
+<body><div id="auth"><div class="panel"><div class="brand">SPASIRO <span>ONLINE</span></div><div class="creatorCredit">CREATED BY VECTOR VIPER</div><p class="sub">PILOT ACCOUNT RECOVERY</p>
+  <p class="notice">Ask a moderator for a one-time recovery code. It expires after 30 minutes and can only be used once.</p>
+  <label>EMAIL OR USERNAME</label><input id="username" autocomplete="username" placeholder="pilot_01 or pilot@example.com">
+  <label>ONE-TIME RECOVERY CODE</label><input id="resetCode" autocomplete="one-time-code" maxlength="12" placeholder="Provided by a moderator">
+  <label>NEW PASSWORD</label><input id="newPassword" type="password" autocomplete="new-password" minlength="6" maxlength="128" placeholder="At least 6 characters">
+  <button id="resetBtn" class="primary">CHANGE PASSWORD</button><div id="recoverMsg" role="status"></div><a class="statsPageLink" href="/">← BACK TO GAME</a>
+</div></div><script src="/recover.js"></script></body></html>

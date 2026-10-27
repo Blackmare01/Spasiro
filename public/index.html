@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SPASIRO // ONLINE</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div id="auth">
+  <div class="panel">
+    <div class="brand">SPASIRO <span>ONLINE</span></div>
+    <div class="creatorCredit">CREATED BY VECTOR VIPER</div>
+    <p class="sub">MULTIPLAYER SECTOR // PILOT REGISTRY</p>
+    <div class="tabs"><button class="tab active" data-mode="login">LOGIN</button><button class="tab" data-mode="register">REGISTER</button></div>
+    <label>EMAIL OR USERNAME</label><input id="username" maxlength="254" autocomplete="username" placeholder="pilot_01 or pilot@example.com">
+    <label>PASSWORD</label><input id="password" type="password" maxlength="128" autocomplete="current-password" placeholder="••••••••">
+    <div id="registerOnly" class="hidden">
+      <label>EMAIL ADDRESS</label><input id="email" type="email" maxlength="254" autocomplete="email" placeholder="pilot@example.com" required>
+      <label>DISPLAY NAME <small>any name</small></label><input id="displayName" maxlength="24" placeholder="AnyPilot">
+      <label>JET</label><div id="jetPick" class="jetpick"></div>
+    </div>
+    <button id="authBtn" class="primary">SIGN IN</button>
+    <div id="authMsg"></div>
+    <div class="notice">Permanent UID. Coins, score and upgrades are saved on the game server.</div>
+    <a class="statsPageLink" href="/stats.html">OPEN PILOT STATS ↗</a>
+    <a class="statsPageLink" href="/recover.html">FORGOT PASSWORD? ↗</a>
+    <a class="statsPageLink" href="/moderator.html">MODERATOR ROOM ↗</a>
+  </div>
+</div>
+
+<div id="game" class="hidden">
+  <canvas id="canvas"></canvas>
+  <section id="mainMenu" class="mainMenu">
+    <div class="mainMenuCard">
+      <div class="mainMenuBrand">SPASIRO <span>ONLINE</span><small>CREATED BY VECTOR VIPER</small></div>
+      <div id="mainMenuHome">
+        <div class="mainMenuPilot"><img id="mainMenuAvatar" src="" alt=""><div><strong id="mainMenuName">PILOT</strong><span>LV <b id="mainMenuLevel">1</b> · <b id="mainMenuCoins">0</b> COINS</span></div></div>
+        <div class="mainMenuActions"><button id="mainPlayBtn" class="primary mainPlay">PLAY</button><button id="mainShopBtn">SHOP & UPGRADES</button><button id="mainProfileBtn">PROFILE</button><button id="mainFriendsBtn">FRIENDS <span id="friendRequestCount"></span></button><a href="/stats.html" target="_blank" rel="noopener">PILOT STATS ↗</a><a id="mainModeratorLink" class="moderatorLink hidden" href="/moderator.html" target="_blank" rel="noopener">MODERATOR ROOM ↗</a><button id="mainLogoutBtn" class="mainLogout">LOG OUT</button></div>
+        <div class="mainMenuSettings">
+          <label for="serverRegion">SERVER REGION</label><select id="serverRegion"><option value="AS">ASIA — AS</option><option value="US">USA — US</option><option value="EU">EUROPE — EU</option><option value="AS_private">ASIA PRIVATE</option><option value="US_private">USA PRIVATE</option><option value="EU_private">EUROPE PRIVATE</option></select>
+          <label for="matchMode">GAME MODE</label><select id="matchMode"><option value="ffa">FREE FOR ALL</option><option value="tdm">TEAM DEATHMATCH</option></select>
+          <div id="privateCodeWrap" class="hidden"><label for="privateRegionCode">PRIVATE SERVER CODE · OPTIONAL</label><input id="privateRegionCode" maxlength="32" autocomplete="off" placeholder="Leave blank to spectate; enter code to play"></div>
+          <div id="mainMenuMsg" role="status"></div>
+        </div>
+      </div>
+      <div id="friendsView" class="hidden">
+        <div class="friendsHeading"><h2>FRIENDS</h2><button id="friendsBackBtn" type="button">BACK</button></div>
+        <form id="friendRequestForm"><input id="friendLookup" maxlength="64" autocomplete="off" placeholder="Username or pilot UID"><button type="submit">SEND REQUEST</button></form>
+        <div id="friendsMessage" role="status"></div>
+        <div id="friendsDirectory">
+        <h3>FRIEND REQUESTS</h3><div id="incomingFriendRequests" class="friendsList"></div>
+        <h3>YOUR FRIENDS</h3><div id="friendsList" class="friendsList"></div>
+        <h3>SENT REQUESTS</h3><div id="outgoingFriendRequests" class="friendsList"></div>
+        </div>
+        <section id="dmView" class="dmView hidden" aria-label="Direct message conversation">
+          <div class="dmHeading"><button id="dmBackBtn" type="button">← FRIENDS</button><div><strong id="dmFriendName">PILOT</strong><span id="dmFriendStatus"></span></div></div>
+          <div id="dmMessages" class="dmMessages" aria-live="polite"></div>
+          <form id="dmComposeForm"><input id="dmInput" maxlength="500" autocomplete="off" placeholder="Write a message"><button type="submit">SEND</button></form>
+          <div id="dmStatus" role="status"></div>
+        </section>
+      </div>
+    </div>
+  </section>
+  <div class="hud top">
+    <div><b id="nameHud">PILOT</b><span id="uidHud"></span></div>
+    <div class="hudStats"><span id="serverHud">AS · FREE FOR ALL</span> &nbsp; <span id="pingHud" role="status" aria-label="Server ping">PING --</span> &nbsp; LV <b id="levelHud">1</b> &nbsp; COINS <b id="coinsHud">0</b> &nbsp; SCORE <b id="scoreHud">0</b> &nbsp; KILLS <b id="killsHud">0</b> <b id="matchScoreHud"></b></div>
+    <div class="hudActions"><button id="modQuickToggle" class="hidden">MOD TOOLS</button><a class="statsLink" href="/stats.html" target="_blank" rel="noopener">STATS ↗</a><button id="chatBtn">CHAT</button><button id="soundBtn" aria-label="Toggle sound">SOUND ON</button><button id="menuBtn">MENU</button></div>
+  </div>
+  <section id="modQuickPanel" class="modQuickPanel hidden" aria-label="Moderator gameplay controls">
+    <div class="modQuickHeading">MODERATOR GAMEPLAY</div>
+    <button id="invisibleToggle" type="button">GO INVISIBLE</button>
+    <label for="modCoinsAmount">SET YOUR COINS</label>
+    <div class="coinsBox"><input id="modCoinsAmount" type="number" min="0" step="1" inputmode="numeric" placeholder="Enter coin amount"><button id="modSetCoins" type="button">SET</button></div>
+    <label for="modSpectateTarget">SPECTATE PILOT</label>
+    <select id="modSpectateTarget"><option value="">Choose a pilot in this sector…</option></select>
+    <div class="modSpectateActions"><button id="startModSpectate" type="button">SPECTATE</button><button id="stopModSpectate" type="button">STOP</button></div>
+    <label class="modFlameChoice" for="modFlameColor">YOUR FLAME COLOR<input id="modFlameColor" type="color" value="#ff9a35"></label>
+    <div id="modQuickMsg" role="status"></div>
+  </section>
+  <div class="hud bottom"><span>WASD / ARROWS: MOVE</span><span>SPACE / CLICK: FIRE</span><span>ESC: MENU</span></div>
+  <div id="menu" class="hidden">
+    <div class="panel menuPanel">
+      <div class="brand">PILOT CONTROL</div>
+      <div class="menuTabs">
+        <button class="menuTab active" data-page="shopPage">SHOP</button>
+        <button class="menuTab" data-page="spritePage">SPRITES</button>
+        <button class="menuTab" data-page="upgradePage">UPGRADES</button>
+        <button class="menuTab" data-page="missionPage">MISSIONS</button>
+        <button class="menuTab" data-page="profilePage">PROFILE</button>
+        <button class="menuTab" data-page="leaderPage">LEADERBOARD</button>
+        <button id="teamTab" class="menuTab" data-page="teamPage">TEAM</button>
+        <button id="chatTab" class="menuTab" data-page="chatPage">CHAT</button>
+        <button id="observerTab" class="menuTab hidden" data-page="observerPage">SPECTATE</button>
+      </div>
+
+      <section id="shopPage" class="menuPage">
+        <div class="sectionTitle">JET SHOP</div>
+        <div class="coinsBox">YOUR COINS <b id="shopCoins">0</b></div>
+        <p class="shopNote">All four standard jets are unlocked. Pick any jet you want.</p>
+        <div id="shopJets" class="shopGrid"></div>
+      </section>
+
+      <section id="spritePage" class="menuPage hidden">
+        <div class="sectionTitle">COMMUNITY SPRITE BAY</div>
+        <div class="coinsBox">YOUR COINS <b id="spriteCoins">0</b></div>
+        <div id="spriteShop" class="spriteShopGrid"><div class="shopNote">Loading sprites…</div></div>
+        <div class="sectionTitle" style="margin-top:18px">REDEEM A JET CODE</div>
+        <div class="coinsBox"><input id="spriteRedeemCode" maxlength="32" autocomplete="off" placeholder="Enter redeem code" aria-label="Sprite redemption code" style="flex:1;min-width:0;width:auto"><button id="redeemSpriteCode" class="buyBtn">REDEEM</button></div>
+        <div id="spriteStoreMsg" role="status"></div>
+      </section>
+
+      <section id="missionPage" class="menuPage hidden">
+        <div class="sectionTitle">FLIGHT LOG // LIVE OBJECTIVES</div>
+        <div id="missionList"></div>
+      </section>
+
+      <section id="upgradePage" class="menuPage hidden">
+        <div class="sectionTitle">UPGRADE SYSTEM</div>
+        <div class="coinsBox">YOUR COINS <b id="upgradeCoins">0</b></div>
+        <div id="upgradeList"></div>
+        <div id="shopMsg"></div>
+      </section>
+
+      <section id="profilePage" class="menuPage hidden">
+        <div class="sectionTitle">PROFILE</div>
+        <div class="profilePhotoRow"><img id="profileAvatarPreview" src="" alt="Profile photo"><label>PROFILE PHOTO<input id="profilePhotoFile" type="file" accept="image/*"><small>JPG/PNG · resized to 256px</small></label><button id="removeProfilePhoto" type="button" class="actionButton">REMOVE</button></div>
+        <div id="avatarMsg" role="status"></div>
+        <label>ACCOUNT EMAIL</label><input id="profileEmail" type="email" maxlength="254" autocomplete="email" placeholder="pilot@example.com">
+        <label>DISPLAY NAME</label><input id="editName" maxlength="24">
+        <label>JET</label><div id="editJetPick" class="jetpick"></div>
+        <button id="saveProfile" class="primary">SAVE PROFILE</button>
+        <div id="profileMsg" role="status"></div>
+      </section>
+
+      <section id="leaderPage" class="menuPage hidden">
+        <div class="sectionTitle">LEADERBOARD</div>
+        <div id="leaderboard">Loading...</div>
+      </section>
+
+      <section id="teamPage" class="menuPage hidden">
+        <div class="sectionTitle">SQUADRON // TEAM</div>
+        <div id="teamCurrent" class="shopNote">You are not in a team.</div>
+        <div id="teamActions">
+          <p class="shopNote">Teams are invite-only. A team leader can send you a recruitment request, which you can accept below.</p>
+          <label>TEAM NAME<input id="teamNameInput" maxlength="24" placeholder="Choose any team name"></label>
+          <button id="createTeamBtn" class="primary">CREATE TEAM · LV 30 · 1,200 COINS</button>
+        </div>
+        <div id="teamRecruitControls" class="hidden">
+          <label>RECRUIT PLAYER · USERNAME OR UID<input id="teamRecruitName" maxlength="40" placeholder="Enter exact username or UID"></label>
+          <button id="sendTeamRequestBtn" class="backButton">SEND RECRUITMENT REQUEST</button>
+        </div>
+        <div id="teamInvites"></div>
+        <div id="teamRoster"></div>
+        <div id="teamMsg" role="status"></div>
+        <a class="statsPageLink" href="/teams.html" target="_blank" rel="noopener">TEAM STATISTICS ↗</a>
+      </section>
+
+      <section id="chatPage" class="menuPage hidden">
+        <div class="sectionTitle">LIVE CHAT</div>
+        <div class="coinsBox"><select id="chatChannel" aria-label="Chat channel"><option value="public">REGION CHAT</option><option value="team">TEAM PRIVATE CHAT</option></select></div>
+        <div id="chatMessages" class="chatMessages" aria-live="polite"></div>
+        <div class="coinsBox"><input id="chatInput" maxlength="200" placeholder="Write a message…" style="flex:1;min-width:0;width:auto"><button id="sendChatBtn" class="buyBtn">SEND</button></div>
+        <p id="privateChatCommandHelp" class="shopNote hidden">Private server commands (access code holders): <code>/game-mode ffa</code> or <code>/game-mode tdm</code>; <code>/game-group player_name to 1</code> or <code>/game-group player_name to 2</code>; remove with <code>/game-group player_name remove from 1</code> or <code>... from 2</code>; add a spectator with <code>/add player to game player_name</code>. Moderator commands: <code>/reset</code> resets the current match; <code>/server down</code> revokes this server's code and disconnects everyone in it.</p>
+      </section>
+
+      <section id="observerPage" class="menuPage hidden">
+        <div class="sectionTitle">PRIVATE REGION // SPECTATOR VIEW</div>
+        <p class="shopNote">Private-region pilots without an access code can spectate only. Enter the code from a moderator in the lobby to join combat.</p>
+        <label for="spectateTarget">SPECTATE PILOT</label>
+        <select id="spectateTarget" style="width:100%;margin:6px 0 10px;padding:12px;background:#0a0a0e;color:#fff;border:1px solid #292930"><option value="">Your own view</option></select>
+        <button id="spectateBtn" class="primary">SPECTATE SELECTED PILOT</button>
+        <div id="spectatorMsg" role="status"></div>
+      </section>
+
+      <div class="menuFooterActions">
+        <button id="closeMenu" class="backButton">BACK TO SECTOR</button>
+        <button id="returnMainMenuBtn" class="backButton hidden" type="button">MAIN MENU</button>
+        <a class="moderatorLink" href="/moderator.html" target="_blank" rel="noopener">MOD ROOM</a>
+        <button id="logoutBtn" class="logoutButton" type="button">LOG OUT</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script><script src="/game.js"></script>
+</body>
+</html>

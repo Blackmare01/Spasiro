@@ -1,0 +1,33 @@
+[
+  {
+    "id": "3363408b4445c261cc",
+    "name": "Nebula",
+    "price": 100,
+    "imageUrl": "/uploads/sprite-3363408b4445c261cc.png",
+    "width": 64,
+    "height": 64,
+    "createdAt": 1793085038549,
+    "available": false
+  },
+  {
+    "id": "a543e0524cb4fb3828",
+    "name": "Hunter's jet",
+    "price": 100,
+    "imageUrl": "/uploads/sprite-a543e0524cb4fb3828.png",
+    "width": 64,
+    "height": 64,
+    "createdAt": 1793087658235,
+    "available": false
+  },
+  {
+    "id": "98c878632eb2ef1497",
+    "name": "Hunter's jet",
+    "price": 100,
+    "distribution": "redeem",
+    "available": false,
+    "imageUrl": "/uploads/sprite-98c878632eb2ef1497.png",
+    "width": 64,
+    "height": 64,
+    "createdAt": 1793089352253
+  }
+]

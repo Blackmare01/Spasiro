@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#07090f">
+  <title>Moderator Room // Spasiro</title>
+  <link rel="stylesheet" href="/stats.css">
+  <link rel="stylesheet" href="/moderator.css">
+  <style>.customSuspend{display:flex;align-items:center;gap:4px;margin:0;color:#7e91a5;font-size:8px}.customSuspend input.suspendChoice{width:76px;margin:0;padding:6px 5px}</style>
+</head>
+<body>
+  <div class="stars" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="wordmark" href="/">SPASIRO <span>ONLINE</span></a>
+    <div class="topActions"><span class="liveDot"></span> MODERATOR ROOM <a href="/">← BACK TO GAME</a></div>
+  </header>
+  <main class="shell modShell">
+    <section class="intro">
+      <div class="eyebrow">FLEET COMMAND // RESTRICTED CONSOLE</div>
+      <h1>MODERATOR <span>ROOM</span></h1>
+      <p>Manage pilot conduct, the sprite bay, and server backups. <span class="creatorCredit">SPASIRO · CREATED BY VECTOR VIPER</span></p>
+    </section>
+
+    <section id="modLogin" class="modLogin">
+      <div class="modCard">
+        <div class="eyebrow">SERVER VERIFIED ACCESS</div>
+        <h2>Enter moderator code</h2>
+        <p>The code is checked by the game server and is never sent to the player roster.</p>
+        <form id="loginForm">
+          <label for="modCode">MODERATOR CODE</label>
+          <input id="modCode" type="password" inputmode="numeric" autocomplete="current-password" maxlength="32" required>
+          <button class="primaryAction" type="submit">OPEN CONSOLE</button>
+        </form>
+        <div id="loginMessage" class="statusMessage" role="status"></div>
+      </div>
+    </section>
+
+    <section id="modConsole" class="hidden">
+      <div class="modOverview">
+        <article class="metric"><span>PILOT ACCOUNTS</span><strong id="metricPilots">—</strong><small>REGISTERED</small></article>
+        <article class="metric"><span>ONLINE NOW</span><strong id="metricOnline">—</strong><small>CONNECTED</small></article>
+        <article class="metric"><span>MOD ACTIONS</span><strong id="metricRestrictions">—</strong><small>BANNED OR SUSPENDED</small></article>
+        <article class="metric"><span>SERVER STORAGE</span><strong id="metricStorage">—</strong><small id="metricBackups">BACKUPS —</small></article>
+      </div>
+      <nav class="modNav" aria-label="Moderator tools">
+        <button class="modTab" data-panel="myLevelPanel">MY LEVEL</button>
+        <button class="modTab active" data-panel="playersPanel">PILOT MODERATION</button>
+        <button class="modTab" data-panel="livePanel">LIVE SPECTATOR</button>
+        <button class="modTab" data-panel="spritesPanel">SPRITE WORKSHOP</button>
+        <button class="modTab" data-panel="storagePanel">STORAGE & BACKUPS</button>
+        <button id="modLogout" class="modLogout">LOG OUT</button>
+      </nav>
+
+      <section id="myLevelPanel" class="modPanel hidden">
+        <div class="panelHeading"><div><div class="eyebrow">MODERATOR ACCOUNT</div><h2>Set your own level</h2></div></div>
+        <p class="panelCopy">This control only changes the level on the moderator account that opened this room. It cannot edit another pilot’s level.</p>
+        <div id="myLevelForm" class="storageActions"><label>YOUR LEVEL<input id="myLevelInput" type="number" min="1" max="10000" step="1" value="1"></label><button id="saveMyLevel" class="primaryAction">SAVE MY LEVEL</button></div>
+        <div id="myLevelMessage" class="statusMessage" role="status"></div>
+      </section>
+
+      <section id="playersPanel" class="modPanel">
+        <div class="panelHeading"><div><div class="eyebrow">ACCOUNT ACTIONS</div><h2>Manage pilots</h2></div><button id="refreshPilots" class="quietButton">↻ REFRESH</button></div>
+        <div class="searchBar"><span>⌕</span><input id="pilotSearch" type="search" placeholder="Search name, username, email, or UID…"><span id="pilotCount" class="countText">—</span></div>
+        <p class="panelCopy">MAKE MOD marks a pilot as a moderator and shows “(MOD)” by their name in game and stats. Marked accounts cannot be banned or suspended until their MOD designation is removed. This badge does not replace the moderator-room access code. Passwords are never readable; ISSUE RESET creates a one-time code valid for 30 minutes.</p>
+        <div class="tableWrap"><table class="pilotTable"><thead><tr><th>PILOT</th><th>SCORE</th><th>COINS</th><th>STATUS</th><th>MODERATION</th></tr></thead><tbody id="moderatorPilotRows"><tr><td colspan="5" class="empty">Loading pilot records…</td></tr></tbody></table></div>
+        <div id="pilotMessage" class="statusMessage" role="status"></div>
+      </section>
+
+      <section id="livePanel" class="modPanel hidden">
+        <div class="panelHeading"><div><div class="eyebrow">LIVE REGIONAL FEED</div><h2>Spectate & moderator visibility</h2></div><button id="refreshLive" class="quietButton">↻ REFRESH</button></div>
+        <p class="panelCopy">Select an online pilot to view their current match. Invisible mode can only be changed for designated moderators; invisible moderator ships remain visible to moderator observers.</p>
+        <label class="livePilotPicker">ONLINE PILOT<select id="livePilotSelect"><option value="">Loading pilots…</option></select></label>
+        <div class="storageActions"><button id="startSpectating" class="primaryAction">SPECTATE PILOT</button><button id="invisibleOn" class="quietButton">INVISIBLE ON</button><button id="invisibleOff" class="quietButton">INVISIBLE OFF</button></div>
+        <canvas id="modSpectateCanvas" width="800" height="430" style="display:block;width:100%;height:320px;margin-top:14px;border:1px solid #ffffff18;background:#02050a"></canvas>
+        <div id="liveMessage" class="statusMessage" role="status"></div>
+      </section>
+
+      <section id="spritesPanel" class="modPanel hidden">
+        <div class="panelHeading"><div><div class="eyebrow">PLAYER COIN MARKET</div><h2>Sprite workshop</h2></div></div>
+        <p class="panelCopy">Upload a transparent PNG, then choose whether players get it from the coin shop or a one-use redeem code. Moderator accounts get every sprite for free.</p>
+        <form id="spriteForm" class="spriteForm">
+          <label>SPRITE NAME<input id="spriteName" maxlength="32" placeholder="Nebula fighter" required></label>
+          <label>PLAYER DISTRIBUTION<select id="spriteDistribution" style="width:100%;margin-top:8px;padding:12px;border:1px solid #283547;background:#080c12;color:#eef5ff"><option value="shop">Coin shop</option><option value="redeem">Redeem code</option></select></label>
+          <label id="spritePriceField">PRICE IN COINS<input id="spritePrice" type="number" min="1" max="1000000" value="100" required></label>
+          <label id="spriteCustomCodeField" class="hidden">CUSTOM REDEEM CODE (OPTIONAL)<input id="spriteCustomCode" maxlength="32" placeholder="Leave blank to generate a code"><small>4–32 letters, numbers, - or _</small></label>
+          <label class="uploadBox">PNG SPRITE (MAX 2 MB, UP TO 1024 × 1024)<input id="spriteFile" type="file" accept="image/png" required><span id="spriteFileName">Choose PNG file…</span></label>
+          <button id="publishSpriteButton" class="primaryAction" type="submit">PUBLISH TO SPRITE BAY</button>
+        </form>
+        <div id="spriteMessage" class="statusMessage" role="status"></div>
+        <div class="publishedHeading"><div class="eyebrow">PUBLISHED ITEMS</div><span id="spriteCount">—</span></div>
+        <div id="publishedSprites" class="publishedGrid"></div>
+        <div class="publishedHeading"><div class="eyebrow">ONE-USE REDEMPTION CODE</div></div>
+        <p class="panelCopy">Choose a listed sprite and generate a random code or enter your own custom code. The player who redeems it receives and equips that sprite.</p>
+        <form id="redeemCodeForm" class="spriteForm">
+          <label>REWARD SPRITE<select id="redeemSpriteSelect" required style="width:100%;margin-top:8px;padding:12px;border:1px solid #283547;background:#080c12;color:#eef5ff"><option value="">Publish a sprite first</option></select></label>
+          <label>CUSTOM CODE (OPTIONAL)<input id="redeemCustomCode" maxlength="32" placeholder="Leave blank to generate"><small>4–32 letters, numbers, - or _</small></label>
+          <button class="primaryAction" type="submit">GENERATE REDEEM CODE</button>
+        </form>
+        <div id="redeemCodeMessage" class="statusMessage" role="status"></div>
+      </section>
+
+      <section id="storagePanel" class="modPanel hidden">
+        <div class="panelHeading"><div><div class="eyebrow">PILOT DATA & ASSETS</div><h2>Storage management</h2></div></div>
+        <p class="panelCopy">Create a local server snapshot of player accounts, sprite listings, and uploaded sprite files.</p>
+        <div class="storageActions"><button id="createBackup" class="primaryAction">CREATE BACKUP</button><button id="refreshOverview" class="quietButton">↻ REFRESH STORAGE</button></div>
+        <div id="backupMessage" class="statusMessage" role="status"></div>
+        <div class="backupNote">Backups are stored under <code>data/backups/</code> on the game server.</div>
+        <div class="publishedHeading"><div class="eyebrow">PRIVATE SERVER ACCESS</div><span>Codes are reusable until replaced or revoked.</span></div>
+        <div class="storageActions"><select id="privateRegionSelect" class="suspendChoice"><option value="AS_private">AS_private</option><option value="US_private">US_private</option><option value="EU_private">EU_private</option></select><button id="issueRegionCode" class="primaryAction">GENERATE ACCESS CODE</button><button id="revokeRegionCode" class="quietButton">REVOKE CODE</button></div>
+        <div id="regionCodeMessage" class="statusMessage" role="status"></div>
+        <div class="publishedHeading"><div class="eyebrow">STORAGE SUMMARY</div><span id="storageSummary">—</span></div>
+      </section>
+    </section>
+  </main>
+  <script src="/moderator.js"></script>
+</body>
+</html>
