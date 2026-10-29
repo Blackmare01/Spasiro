@@ -382,6 +382,141 @@ app.post("/api/login", async (req, res) => {
     ...userPayload(user)
   });
 });
+
+app.post("/api/mod/login", (req, res) => {
+  const address = req.ip || req.socket.remoteAddress || "unknown";
+  const attempts = moderatorLoginFailures.get(address);
+
+  if (attempts && attempts.resetAt <= Date.now()) {
+    moderatorLoginFailures.delete(address);
+  }
+
+  const current = moderatorLoginFailures.get(address);
+
+  if (current && current.count >= 5) {
+    return res.status(429).json({
+      error: "Too many attempts. Try again in 15 minutes."
+    });
+  }
+
+  const candidate = Buffer.from(String(req.body.code || ""));
+  const expected = Buffer.from(MODERATOR_CODE);
+
+  const valid =
+    candidate.length === expected.length &&
+    crypto.timingSafeEqual(candidate, expected);
+
+  if (!valid) {
+    const window = current || {
+      count: 0,
+      resetAt: Date.now() + 15 * 60 * 1000
+    };
+
+    window.count += 1;
+    moderatorLoginFailures.set(address, window);
+
+    return res.status(401).json({
+      error: "Invalid moderator code."
+    });
+  }
+
+  moderatorLoginFailures.delete(address);
+
+  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
+
+  const token = createModeratorToken({
+    type: "moderator-session",
+    uid: null,
+    exp: expiresAt
+  });
+
+  res.json({
+    token,
+    expiresAt
+  });
+});
+
+app.post("/api/password/reset", async (req, res) => {
+  const identifier = String(req.body.username || "").trim().toLowerCase();
+  const resetCode = String(req.body.resetCode || "").trim();
+  const password = String(req.body.password || "");
+
+  const u = identifier.includes("@")
+    ? Object.values(users).find(
+        account => cleanEmail(account.email) === identifier
+      )
+    : users[identifier];
+
+  if (
+    !u ||
+    !u.passwordReset ||
+    u.passwordReset.expiresAt <= Date.now() ||
+    !(await verifyPassword(
+      resetCode,
+      u.passwordReset.salt,
+      u.passwordReset.hash
+    ))
+  ) {
+    return res.status(400).json({
+      error: "Invalid or expired recovery code. Ask a moderator for a new one."
+    });
+  }
+
+  if (password.length < 6 || password.length > 128) {
+    return res.status(400).json({
+      error: "New password must be 6-128 characters."
+    });
+  }
+
+  const hp = await hashPassword(password);
+
+  u.passwordHash = hp.hash;
+  u.salt = hp.salt;
+  delete u.passwordReset;
+
+  saveUsers();
+
+  res.json({
+    ok: true,
+    message: "Password changed. You can now sign in."
+  });
+});
+
+app.post("/api/login", async (req, res) => {
+  const identifier = String(req.body.username || "").trim().toLowerCase();
+  const password = String(req.body.password || "");
+
+  const user = identifier.includes("@")
+    ? Object.values(users).find(
+        account => cleanEmail(account.email) === identifier
+      )
+    : users[identifier];
+
+  if (!user || !(await verifyPassword(password, user.salt, user.passwordHash))) {
+    return res.status(401).json({
+      error: "Invalid username or password."
+    });
+  }
+
+  if (user.banned) {
+    return res.status(403).json({
+      error: "This account is banned."
+    });
+  }
+
+  if (user.suspendedUntil > Date.now()) {
+    return res.status(403).json({
+      error: `This account is suspended until ${new Date(
+        user.suspendedUntil
+      ).toLocaleString()}.`
+    });
+  }
+
+  res.json({
+    ok: true,
+    ...userPayload(user)
+  });
+});
   }
 
   if (user.banned) {
