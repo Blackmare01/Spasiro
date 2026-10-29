@@ -754,7 +754,26 @@ io.on("connection",socket=>{
   socket.on("mod:invisible",enabled=>{const p=players.get(socket.id);if(!p?.isModerator)return socket.emit("mod:result",{error:"Moderator access required."});p.isInvisible=enabled===true;if(p.isInvisible)p.input.shoot=false;socket.emit("mod:result",{isInvisible:p.isInvisible,message:`Invisible mode ${p.isInvisible?"enabled":"disabled"}.`});});
   socket.on("mod:spectate",targetId=>{const p=players.get(socket.id);if(!p?.isModerator)return socket.emit("mod:result",{error:"Moderator access required."});if(targetId===null||targetId===""){p.spectateTargetId=null;p.input={up:false,down:false,left:false,right:false,shoot:false};return socket.emit("mod:result",{spectateTargetId:null,message:"Spectating stopped."});}const target=players.get(String(targetId));if(!target||target.roomKey!==p.roomKey||target.id===p.id)return socket.emit("mod:result",{error:"Choose another pilot in your current region and game mode."});p.spectateTargetId=target.id;p.input={up:false,down:false,left:false,right:false,shoot:false};socket.emit("mod:result",{spectateTargetId:target.id,message:`Spectating ${target.name}.`});});
   socket.on("mod:flameColor",color=>{const p=players.get(socket.id),user=p&&findUserByUid(p.uid);if(!p?.isModerator||!user?.isModerator)return socket.emit("mod:result",{error:"Moderator access required."});if(!/^#[0-9a-f]{6}$/i.test(String(color||"")))return socket.emit("mod:result",{error:"Choose a valid flame color."});p.flameColor=cleanFlameColor(color);user.flameColor=p.flameColor;saveUsers();socket.emit("accountUpdate",userPayload(user));socket.emit("mod:result",{flameColor:p.flameColor,message:"Flame color saved."});});
-  socket.on("mod:ticket",()=>{const p=players.get(socket.id);const user=p&&findUserByUid(p.uid);if(!p?.isModerator||!user?.isModerator)return socket.emit("mod:ticket",{error:"Sign in with a designated moderator account first."});for(const [oldTicket,data] of moderatorTickets)if(data.uid===user.uid)moderatorTickets.delete(oldTicket);const ticket=crypto.randomBytes(32).toString("hex");moderatorTickets.set(ticket,{uid:user.uid});socket.emit("mod:ticket",{ticket});});
+ socket.on("mod:ticket", () => {
+  const p = players.get(socket.id);
+  const user = p && findUserByUid(p.uid);
+
+  if (!p?.isModerator || !user?.isModerator) {
+    return socket.emit("mod:ticket", {
+      error: "Sign in with a designated moderator account first."
+    });
+  }
+
+  const expiresAt = Date.now() + 2 * 60 * 1000;
+
+  const ticket = createModeratorToken({
+    type: "moderator-handoff",
+    uid: user.uid,
+    exp: expiresAt
+  });
+
+  socket.emit("mod:ticket", { ticket });
+});
   socket.on("chat:send",data=>{const user=findUserByUid(socket.data.uid);if(!user)return;const text=String(data?.text||"").replace(/[\u0000-\u001f\u007f]/g," ").trim().slice(0,200);if(!text)return;if(Date.now()-(socket.data.lastChatAt||0)<500)return socket.emit("chat:error","Please wait before sending another message.");socket.data.lastChatAt=Date.now();const channel=data?.channel==="team"?"team":"public";if(channel==="team"&&!user.teamId)return socket.emit("chat:error","Join a team to use team chat.");if(channel==="public"&&handlePrivateChatCommand(socket,text))return;const message={channel,name:pilotName(user),text,at:Date.now()};if(channel==="team")io.to(teamRoom(user.teamId)).emit("chat:message",message);else io.to(socket.data.chatRoom).emit("chat:message",message);});
   socket.on("team:create",rawName=>{const p=players.get(socket.id),user=findUserByUid(socket.data.uid);if(!p||!user)return;if(user.teamId)return socket.emit("team:error","Leave your current team before creating another.");const name=String(rawName||"").trim().replace(/\s+/g," ").slice(0,24);if(name.length<2)return socket.emit("team:error","Team names must be 2-24 characters.");if(teams.some(team=>team.name.toLowerCase()===name.toLowerCase()))return socket.emit("team:error","That team name is already taken.");const level=userLevel(user);if(level<30)return socket.emit("team:error","You need to be level 30 to create a team.");if(p.coins<1200)return socket.emit("team:error","You need 1,200 coins to create a team.");p.coins-=1200;user.coins=p.coins;const team={id:crypto.randomBytes(8).toString("hex"),name,leaderUids:[user.uid],memberUids:[user.uid],createdAt:Date.now()};teams.push(team);user.teamId=team.id;saveTeams();syncUserFromPlayer(p);socket.join(teamRoom(team.id));p.name=pilotName(user);socket.emit("accountUpdate",userPayload(user));socket.emit("teamRoster",{members:teamRoster(team)});socket.emit("team:message","Team created.");});
   socket.on("team:join",()=>socket.emit("team:error","Teams are invite-only. A team leader must send you a recruitment request."));
