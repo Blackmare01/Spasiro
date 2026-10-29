@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-let socket=io({autoConnect:false});
+let socket=io({autoConnect:false,transports:["websocket"]});
 let mode="login", account=null, myId=null, world={w:2400,h:1400}, state={entities:[],bullets:[],asteroids:[]};
 let keys={}, mouseDown=false, camera={x:0,y:0}, selectedJet="blue", editJet="blue", spectateTargetId=null, invisibleMode=false, spectateRosterKey="";
 let currentRegion="AS",currentMatchMode="ffa",privateSpectator=false;
@@ -51,7 +51,7 @@ $("authBtn").onclick=async()=>{
 function connectServer(){
   if(!account)return;
   if(socket.connected) socket.disconnect();
-  socket=io({autoConnect:false});
+socket=io({autoConnect:false,transports:["websocket"]});
   socket.on("connect",()=>{socket.emit("auth",{username:account.username,uid:account.uid,region:"AS",matchMode:"ffa"});startPingMonitor();});
   socket.on("disconnect",()=>{clearInterval(pingTimer);pingTimer=0;pingValue=null;pingRequestPending=false;updatePingDisplay();});
   socket.on("authError",m=>{$("authMsg").textContent=m});
