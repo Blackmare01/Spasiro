@@ -277,14 +277,30 @@ app.post("/api/mod/login", (req, res) => {
 
 app.post("/api/mod/login-player", (req, res) => {
   const ticket = String(req.body.ticket || "");
-  const ticketData = moderatorTickets.get(ticket);
-  moderatorTickets.delete(ticket);
-  if (!ticketData) return res.status(401).json({ error: "Moderator handoff is invalid or already used. Return to the signed-in game and try again." });
-  const user = Object.values(users).find(candidate => candidate.uid === ticketData.uid);
-  if (!user?.isModerator || user.banned || user.suspendedUntil > Date.now()) return res.status(403).json({ error: "This account no longer has moderator access." });
-  const token = crypto.randomBytes(32).toString("hex");
+  const ticketData = verifyModeratorToken(ticket);
+
+  if (!ticketData || ticketData.type !== "moderator-handoff") {
+    return res.status(401).json({
+      error: "Moderator handoff is invalid or expired. Return to the signed-in game and try again."
+    });
+  }
+
+  const user = findUserByUid(ticketData.uid);
+
+  if (!user?.isModerator || user.banned || user.suspendedUntil > Date.now()) {
+    return res.status(403).json({
+      error: "This account no longer has moderator access."
+    });
+  }
+
   const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
-  moderatorSessions.set(token, { expiresAt, uid: user.uid });
+
+  const token = createModeratorToken({
+    type: "moderator-session",
+    uid: user.uid,
+    exp: expiresAt
+  });
+
   res.json({ token, expiresAt });
 });
 
