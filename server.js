@@ -254,27 +254,34 @@ app.post("/api/password/reset", async (req, res) => {
   res.json({ ok: true, message: "Password changed. You can now sign in." });
 });
 
-app.post("/api/mod/login", (req, res) => {
-  const address = req.ip || req.socket.remoteAddress || "unknown";
-  const attempts = moderatorLoginFailures.get(address);
-  if (attempts && attempts.resetAt <= Date.now()) moderatorLoginFailures.delete(address);
-  const current = moderatorLoginFailures.get(address);
-  if (current && current.count >= 5) return res.status(429).json({ error: "Too many attempts. Try again in 15 minutes." });
-  const candidate = Buffer.from(String(req.body.code || ""));
-  const expected = Buffer.from(MODERATOR_CODE);
-  const valid = candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
-  if (!valid) {
-    const window = current || { count: 0, resetAt: Date.now() + 15 * 60 * 1000 };
-    window.count += 1;moderatorLoginFailures.set(address, window);
-    return res.status(401).json({ error: "Invalid moderator code." });
-  }
-  moderatorLoginFailures.delete(address);
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
-  moderatorSessions.set(token, { expiresAt, uid: null });
-  res.json({ token, expiresAt });
-});
+app.post("/api/login", async (req, res) => {
+  const identifier = String(req.body.username || "").trim().toLowerCase();
+  const password = String(req.body.password || "");
 
+  const user = identifier.includes("@")
+    ? Object.values(users).find(account => cleanEmail(account.email) === identifier)
+    : users[identifier];
+
+  if (!user || !(await verifyPassword(password, user.salt, user.passwordHash))) {
+    return res.status(401).json({
+      error: "Invalid username or password."
+    });
+  }
+
+  if (user.banned) {
+    return res.status(403).json({
+      error: "This account is banned."
+    });
+  }
+
+  if (user.suspendedUntil > Date.now()) {
+    return res.status(403).json({
+      error: `This account is suspended until ${new Date(user.suspendedUntil).toLocaleString()}.`
+    });
+  }
+
+  res.json(userPayload(user));
+});
 app.post("/api/mod/login-player", (req, res) => {
   const ticket = String(req.body.ticket || "");
   const ticketData = verifyModeratorToken(ticket);
