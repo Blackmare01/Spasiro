@@ -180,15 +180,72 @@ app.post("/api/register", async (req, res) => {
   const email = cleanEmail(req.body.email);
   const password = String(req.body.password || "");
   const displayName = cleanName(req.body.displayName || username);
-  if (!/^[a-z0-9_.-]{3,24}$/.test(username)) return res.status(400).json({ error: "Username must be 3-24 characters: letters, numbers, _, . or -." });
-  if (!validEmail(email)) return res.status(400).json({ error: "Enter a valid email address." });
-  if (password.length < 6 || password.length > 128) return res.status(400).json({ error: "Password must be 6-128 characters." });
-  if (users[username]) return res.status(409).json({ error: "Username already exists on this account database." });
-  if (Object.values(users).some(u => cleanEmail(u.email) === email)) return res.status(409).json({ error: "An account already uses this email address." });
+
+  if (!/^[a-z0-9_.-]{3,24}$/.test(username)) {
+    return res.status(400).json({
+      error: "Username must be 3-24 characters: letters, numbers, _, . or -."
+    });
+  }
+
+  if (!validEmail(email)) {
+    return res.status(400).json({
+      error: "Enter a valid email address."
+    });
+  }
+
+  if (password.length < 6 || password.length > 128) {
+    return res.status(400).json({
+      error: "Password must be 6-128 characters."
+    });
+  }
+
+  if (users[username]) {
+    return res.status(409).json({
+      error: "Username already exists on this account database."
+    });
+  }
+
+  if (Object.values(users).some(u => cleanEmail(u.email) === email)) {
+    return res.status(409).json({
+      error: "An account already uses this email address."
+    });
+  }
+
   const hp = await hashPassword(password);
-  users[username] = { uid: uid(), username, email, displayName, jet: cleanJet(req.body.jet), passwordHash: hp.hash, salt: hp.salt, score: 0, kills: 0, games: 0, coins: 0, upgrades: { speed: 0, armor: 0, weapon: 0 }, inventory: [], friends: [], friendRequests: [], spriteId: null, avatarUrl: "", banned: false, suspendedUntil: 0, createdAt: Date.now() };
+
+  users[username] = {
+    uid: uid(),
+    username,
+    email,
+    displayName,
+    jet: cleanJet(req.body.jet),
+    passwordHash: hp.hash,
+    salt: hp.salt,
+    score: 0,
+    kills: 0,
+    games: 0,
+    coins: 0,
+    upgrades: {
+      speed: 0,
+      armor: 0,
+      weapon: 0
+    },
+    inventory: [],
+    friends: [],
+    friendRequests: [],
+    spriteId: null,
+    avatarUrl: "",
+    banned: false,
+    suspendedUntil: 0,
+    createdAt: Date.now()
+  };
+
   saveUsers();
-  res.json({ ok: true, ...userPayload(users[username]) });
+
+  res.json({
+    ok: true,
+    ...userPayload(users[username])
+  });
 });
 
 app.post("/api/mod/login", (req, res) => {
@@ -238,20 +295,56 @@ app.post("/api/mod/login", (req, res) => {
     exp: expiresAt
   });
 
-  res.json({ token, expiresAt });
+  res.json({
+    token,
+    expiresAt
+  });
 });
 
 app.post("/api/password/reset", async (req, res) => {
   const identifier = String(req.body.username || "").trim().toLowerCase();
   const resetCode = String(req.body.resetCode || "").trim();
   const password = String(req.body.password || "");
-  const u = identifier.includes("@") ? Object.values(users).find(account => cleanEmail(account.email) === identifier) : users[identifier];
-  if (!u || !u.passwordReset || u.passwordReset.expiresAt <= Date.now() || !(await verifyPassword(resetCode, u.passwordReset.salt, u.passwordReset.hash))) return res.status(400).json({ error: "Invalid or expired recovery code. Ask a moderator for a new one." });
-  if (password.length < 6 || password.length > 128) return res.status(400).json({ error: "New password must be 6-128 characters." });
+
+  const u = identifier.includes("@")
+    ? Object.values(users).find(
+        account => cleanEmail(account.email) === identifier
+      )
+    : users[identifier];
+
+  if (
+    !u ||
+    !u.passwordReset ||
+    u.passwordReset.expiresAt <= Date.now() ||
+    !(await verifyPassword(
+      resetCode,
+      u.passwordReset.salt,
+      u.passwordReset.hash
+    ))
+  ) {
+    return res.status(400).json({
+      error: "Invalid or expired recovery code. Ask a moderator for a new one."
+    });
+  }
+
+  if (password.length < 6 || password.length > 128) {
+    return res.status(400).json({
+      error: "New password must be 6-128 characters."
+    });
+  }
+
   const hp = await hashPassword(password);
-  u.passwordHash = hp.hash; u.salt = hp.salt; delete u.passwordReset;
+
+  u.passwordHash = hp.hash;
+  u.salt = hp.salt;
+  delete u.passwordReset;
+
   saveUsers();
-  res.json({ ok: true, message: "Password changed. You can now sign in." });
+
+  res.json({
+    ok: true,
+    message: "Password changed. You can now sign in."
+  });
 });
 
 app.post("/api/login", async (req, res) => {
@@ -259,13 +352,36 @@ app.post("/api/login", async (req, res) => {
   const password = String(req.body.password || "");
 
   const user = identifier.includes("@")
-    ? Object.values(users).find(account => cleanEmail(account.email) === identifier)
+    ? Object.values(users).find(
+        account => cleanEmail(account.email) === identifier
+      )
     : users[identifier];
 
   if (!user || !(await verifyPassword(password, user.salt, user.passwordHash))) {
     return res.status(401).json({
       error: "Invalid username or password."
     });
+  }
+
+  if (user.banned) {
+    return res.status(403).json({
+      error: "This account is banned."
+    });
+  }
+
+  if (user.suspendedUntil > Date.now()) {
+    return res.status(403).json({
+      error: `This account is suspended until ${new Date(
+        user.suspendedUntil
+      ).toLocaleString()}.`
+    });
+  }
+
+  res.json({
+    ok: true,
+    ...userPayload(user)
+  });
+});
   }
 
   if (user.banned) {
