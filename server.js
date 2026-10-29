@@ -72,9 +72,58 @@ function saveRedeemCodes() { fs.writeFileSync(REDEEM_FILE, JSON.stringify(redeem
 function saveTeams() { fs.writeFileSync(TEAMS_FILE, JSON.stringify(teams, null, 2), "utf8"); }
 function saveRegionCodes() { fs.writeFileSync(REGION_CODES_FILE, JSON.stringify(regionCodes, null, 2), "utf8"); }
 function saveDirectMessages() { fs.writeFileSync(DIRECT_MESSAGES_FILE, JSON.stringify(directMessages, null, 2), "utf8"); }
-const moderatorSessions = new Map();
-const moderatorTickets = new Map();
 const moderatorLoginFailures = new Map();
+
+const MODERATOR_TOKEN_SECRET = String(process.env.MODERATOR_TOKEN_SECRET || "");
+
+if (!MODERATOR_TOKEN_SECRET) {
+  throw new Error("MODERATOR_TOKEN_SECRET is not configured.");
+}
+
+function base64Url(value) {
+  return Buffer.from(value).toString("base64url");
+}
+
+function createModeratorToken(payload) {
+  const body = base64Url(JSON.stringify(payload));
+  const signature = crypto
+    .createHmac("sha256", MODERATOR_TOKEN_SECRET)
+    .update(body)
+    .digest("base64url");
+
+  return `${body}.${signature}`;
+}
+
+function verifyModeratorToken(token) {
+  try {
+    const [body, signature] = String(token || "").split(".");
+    if (!body || !signature) return null;
+
+    const expected = crypto
+      .createHmac("sha256", MODERATOR_TOKEN_SECRET)
+      .update(body)
+      .digest("base64url");
+
+    const a = Buffer.from(signature);
+    const b = Buffer.from(expected);
+
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return null;
+    }
+
+    const payload = JSON.parse(
+      Buffer.from(body, "base64url").toString("utf8")
+    );
+
+    if (!payload.exp || payload.exp <= Date.now()) {
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
 function uid() { let id; do { id = "UID-" + crypto.randomBytes(6).toString("hex").toUpperCase(); } while (Object.values(users).some(u => u.uid === id)); return id; }
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) { return new Promise((resolve, reject) => crypto.scrypt(password, salt, 64, (err, key) => err ? reject(err) : resolve({ salt, hash: key.toString("hex") }))); }
 function verifyPassword(password, salt, stored) { return new Promise((resolve, reject) => crypto.scrypt(password, salt, 64, (err, key) => { if (err) return reject(err); const a = Buffer.from(stored, "hex"), b = Buffer.from(key.toString("hex"), "hex"); resolve(a.length === b.length && crypto.timingSafeEqual(a, b)); })); }
