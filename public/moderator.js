@@ -329,19 +329,47 @@ $("modLogout").addEventListener("click", async () => {
 async function redeemGameHandoff() {
   const key = "spaceJetModeratorHandoff";
   const raw = localStorage.getItem(key);
+
   if (!raw) return;
-  localStorage.removeItem(key);
+
   try {
     const handoff = JSON.parse(raw);
-    if (!handoff.ticket) throw new Error("Moderator handoff is invalid. Return to the signed-in game and try again.");
+
+    if (!handoff.ticket) {
+      throw new Error(
+        "Moderator handoff is invalid. Return to the signed-in game and try again."
+      );
+    }
+
     $("loginMessage").textContent = "Verifying moderator account…";
-    const response = await fetch("/api/mod/login-player", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket: handoff.ticket }) });
+
+    const response = await fetch("/api/mod/login-player", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        ticket: handoff.ticket
+      })
+    });
+
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || !data.token) throw new Error(data.error || "Could not verify moderator account.");
+
+    if (!response.ok || !data.token) {
+      throw new Error(
+        data.error || "Could not verify moderator account."
+      );
+    }
+
+    // Only consume the handoff after successful verification.
+    localStorage.removeItem(key);
+
     token = data.token;
     sessionStorage.setItem(tokenKey, token);
+
     $("modLogin").classList.add("hidden");
     $("modConsole").classList.remove("hidden");
+
     await refreshConsole();
   } catch (error) {
     showLogin(error.message);
