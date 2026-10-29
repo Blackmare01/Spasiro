@@ -147,16 +147,28 @@ function getUpgrades(u) { return { speed: Math.max(0, Math.min(5, Number(u.upgra
 function userLevel(u) { const earned = 1 + Math.floor((Number(u.score) || 0) / 500); return u.isModerator && Number.isInteger(u.levelOverride) ? Math.max(1, Math.min(10000, u.levelOverride)) : earned; }
 function userPayload(u) { const team = teams.find(entry => entry.id === u.teamId); return { uid: u.uid, username: u.username, email: u.email || "", displayName: u.displayName, avatarUrl: u.avatarUrl || "", isModerator: !!u.isModerator, jet: u.jet, jetColor: cleanJetColor(u.jetColor), flameColor: cleanFlameColor(u.flameColor), score: u.score, kills: u.kills, games: u.games, level: userLevel(u), coins: u.coins || 0, upgrades: getUpgrades(u), inventory: u.inventory || [], spriteId: u.spriteId || null, teamId: team?.id || null, teamName: team?.name || "", teamLeader: !!team?.leaderUids?.includes(u.uid) }; }
 function moderatorOnly(req, res, next) {
-  const token = String(req.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  const session = moderatorSessions.get(token);
-  const expiresAt = typeof session === "number" ? session : session?.expiresAt;
-  if (!expiresAt || expiresAt <= Date.now()) {
-    moderatorSessions.delete(token);
-    return res.status(401).json({ error: "Moderator session expired. Sign in again." });
+  const token = String(req.get("authorization") || "")
+    .replace(/^Bearer\s+/i, "");
+
+  const session = verifyModeratorToken(token);
+
+  if (!session || session.type !== "moderator-session") {
+    return res.status(401).json({
+      error: "Moderator session expired. Sign in again."
+    });
   }
-  // Renew active sessions so moderators using the console do not get logged out mid-session.
-  moderatorSessions.set(token, { ...(typeof session === "object" ? session : {}), expiresAt: Date.now() + 8 * 60 * 60 * 1000 });
-  req.moderatorSession = moderatorSessions.get(token);
+
+  if (session.uid) {
+    const user = findUserByUid(session.uid);
+
+    if (!user?.isModerator || user.banned || user.suspendedUntil > Date.now()) {
+      return res.status(401).json({
+        error: "Moderator access is no longer valid."
+      });
+    }
+  }
+
+  req.moderatorSession = session;
   next();
 }
 app.use(express.json({ limit: "6mb" }));
@@ -179,16 +191,54 @@ app.post("/api/register", async (req, res) => {
   res.json({ ok: true, ...userPayload(users[username]) });
 });
 
-app.post("/api/login", async (req, res) => {
-  const identifier = String(req.body.username || "").trim().toLowerCase();
-  const password = String(req.body.password || "");
-  const u = identifier.includes("@")
-    ? Object.values(users).find(account => cleanEmail(account.email) === identifier)
-    : users[identifier];
-  if (!u || !(await verifyPassword(password, u.salt, u.passwordHash))) return res.status(401).json({ error: "Invalid username or password." });
-  if (u.banned) return res.status(403).json({ error: "This pilot account is banned." });
-  if (u.suspendedUntil > Date.now()) return res.status(403).json({ error: `This pilot account is suspended until ${new Date(u.suspendedUntil).toLocaleString()}.` });
-  res.json({ ok: true, ...userPayload(u) });
+app.post("/api/mod/login", (req, res) => {
+  const address = req.ip || req.socket.remoteAddress || "unknown";
+  const attempts = moderatorLoginFailures.get(address);
+
+  if (attempts && attempts.resetAt <= Date.now()) {
+    moderatorLoginFailures.delete(address);
+  }
+
+  const current = moderatorLoginFailures.get(address);
+
+  if (current && current.count >= 5) {
+    return res.status(429).json({
+      error: "Too many attempts. Try again in 15 minutes."
+    });
+  }
+
+  const candidate = Buffer.from(String(req.body.code || ""));
+  const expected = Buffer.from(MODERATOR_CODE);
+
+  const valid =
+    candidate.length === expected.length &&
+    crypto.timingSafeEqual(candidate, expected);
+
+  if (!valid) {
+    const window = current || {
+      count: 0,
+      resetAt: Date.now() + 15 * 60 * 1000
+    };
+
+    window.count += 1;
+    moderatorLoginFailures.set(address, window);
+
+    return res.status(401).json({
+      error: "Invalid moderator code."
+    });
+  }
+
+  moderatorLoginFailures.delete(address);
+
+  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
+
+  const token = createModeratorToken({
+    type: "moderator-session",
+    uid: null,
+    exp: expiresAt
+  });
+
+  res.json({ token, expiresAt });
 });
 
 app.post("/api/password/reset", async (req, res) => {
