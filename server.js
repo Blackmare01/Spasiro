@@ -305,8 +305,6 @@ app.post("/api/mod/login-player", (req, res) => {
 });
 
 app.post("/api/mod/logout", moderatorOnly, (req, res) => {
-  const token = String(req.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  moderatorSessions.delete(token);
   res.json({ ok: true });
 });
 
