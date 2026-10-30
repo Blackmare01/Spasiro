@@ -72,8 +72,6 @@ function saveRedeemCodes() { fs.writeFileSync(REDEEM_FILE, JSON.stringify(redeem
 function saveTeams() { fs.writeFileSync(TEAMS_FILE, JSON.stringify(teams, null, 2), "utf8"); }
 function saveRegionCodes() { fs.writeFileSync(REGION_CODES_FILE, JSON.stringify(regionCodes, null, 2), "utf8"); }
 function saveDirectMessages() { fs.writeFileSync(DIRECT_MESSAGES_FILE, JSON.stringify(directMessages, null, 2), "utf8"); }
-const moderatorSessions = new Map();
-const moderatorTickets = new Map();
 const moderatorLoginFailures = new Map();
 function uid() { let id; do { id = "UID-" + crypto.randomBytes(6).toString("hex").toUpperCase(); } while (Object.values(users).some(u => u.uid === id)); return id; }
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) { return new Promise((resolve, reject) => crypto.scrypt(password, salt, 64, (err, key) => err ? reject(err) : resolve({ salt, hash: key.toString("hex") }))); }
