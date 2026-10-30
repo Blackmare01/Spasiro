@@ -9,7 +9,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const PORT = Number(process.env.PORT || 3000);
-const MODERATOR_CODE = String(process.env.MODERATOR_CODE || "77892321");
+const MODERATOR_CODE = String(process.env.MODERATOR_CODE || "");
 const PUBLIC_REGIONS = ["AS", "US", "EU"];
 const PRIVATE_REGIONS = ["AS_private", "US_private", "EU_private"];
 const ALL_REGIONS = [...PUBLIC_REGIONS, ...PRIVATE_REGIONS];
@@ -75,6 +75,10 @@ function saveDirectMessages() { fs.writeFileSync(DIRECT_MESSAGES_FILE, JSON.stri
 const moderatorLoginFailures = new Map();
 
 const MODERATOR_TOKEN_SECRET = String(process.env.MODERATOR_TOKEN_SECRET || "");
+
+if (!MODERATOR_CODE) {
+  throw new Error("MODERATOR_CODE is not configured.");
+}
 
 if (!MODERATOR_TOKEN_SECRET) {
   throw new Error("MODERATOR_TOKEN_SECRET is not configured.");
@@ -213,8 +217,7 @@ app.post("/api/register", async (req, res) => {
 
   const hp = await hashPassword(password);
 
-  users[username] = {
-    uid: uid(),
+  users[username] = {    uid: uid(),
     username,
     email,
     displayName,
@@ -383,156 +386,6 @@ app.post("/api/login", async (req, res) => {
   });
 });
 
-app.post("/api/mod/login", (req, res) => {
-  const address = req.ip || req.socket.remoteAddress || "unknown";
-  const attempts = moderatorLoginFailures.get(address);
-
-  if (attempts && attempts.resetAt <= Date.now()) {
-    moderatorLoginFailures.delete(address);
-  }
-
-  const current = moderatorLoginFailures.get(address);
-
-  if (current && current.count >= 5) {
-    return res.status(429).json({
-      error: "Too many attempts. Try again in 15 minutes."
-    });
-  }
-
-  const candidate = Buffer.from(String(req.body.code || ""));
-  const expected = Buffer.from(MODERATOR_CODE);
-
-  const valid =
-    candidate.length === expected.length &&
-    crypto.timingSafeEqual(candidate, expected);
-
-  if (!valid) {
-    const window = current || {
-      count: 0,
-      resetAt: Date.now() + 15 * 60 * 1000
-    };
-
-    window.count += 1;
-    moderatorLoginFailures.set(address, window);
-
-    return res.status(401).json({
-      error: "Invalid moderator code."
-    });
-  }
-
-  moderatorLoginFailures.delete(address);
-
-  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
-
-  const token = createModeratorToken({
-    type: "moderator-session",
-    uid: null,
-    exp: expiresAt
-  });
-
-  res.json({
-    token,
-    expiresAt
-  });
-});
-
-app.post("/api/password/reset", async (req, res) => {
-  const identifier = String(req.body.username || "").trim().toLowerCase();
-  const resetCode = String(req.body.resetCode || "").trim();
-  const password = String(req.body.password || "");
-
-  const u = identifier.includes("@")
-    ? Object.values(users).find(
-        account => cleanEmail(account.email) === identifier
-      )
-    : users[identifier];
-
-  if (
-    !u ||
-    !u.passwordReset ||
-    u.passwordReset.expiresAt <= Date.now() ||
-    !(await verifyPassword(
-      resetCode,
-      u.passwordReset.salt,
-      u.passwordReset.hash
-    ))
-  ) {
-    return res.status(400).json({
-      error: "Invalid or expired recovery code. Ask a moderator for a new one."
-    });
-  }
-
-  if (password.length < 6 || password.length > 128) {
-    return res.status(400).json({
-      error: "New password must be 6-128 characters."
-    });
-  }
-
-  const hp = await hashPassword(password);
-
-  u.passwordHash = hp.hash;
-  u.salt = hp.salt;
-  delete u.passwordReset;
-
-  saveUsers();
-
-  res.json({
-    ok: true,
-    message: "Password changed. You can now sign in."
-  });
-});
-
-app.post("/api/login", async (req, res) => {
-  const identifier = String(req.body.username || "").trim().toLowerCase();
-  const password = String(req.body.password || "");
-
-  const user = identifier.includes("@")
-    ? Object.values(users).find(
-        account => cleanEmail(account.email) === identifier
-      )
-    : users[identifier];
-
-  if (!user || !(await verifyPassword(password, user.salt, user.passwordHash))) {
-    return res.status(401).json({
-      error: "Invalid username or password."
-    });
-  }
-
-  if (user.banned) {
-    return res.status(403).json({
-      error: "This account is banned."
-    });
-  }
-
-  if (user.suspendedUntil > Date.now()) {
-    return res.status(403).json({
-      error: `This account is suspended until ${new Date(
-        user.suspendedUntil
-      ).toLocaleString()}.`
-    });
-  }
-
-  res.json({
-    ok: true,
-    ...userPayload(user)
-  });
-});
-  }
-
-  if (user.banned) {
-    return res.status(403).json({
-      error: "This account is banned."
-    });
-  }
-
-  if (user.suspendedUntil > Date.now()) {
-    return res.status(403).json({
-      error: `This account is suspended until ${new Date(user.suspendedUntil).toLocaleString()}.`
-    });
-  }
-
-  res.json(userPayload(user));
-});
 app.post("/api/mod/login-player", (req, res) => {
   const ticket = String(req.body.ticket || "");
   const ticketData = verifyModeratorToken(ticket);
@@ -583,8 +436,7 @@ app.post("/api/mod/self/level", moderatorOnly, (req, res) => {
   res.json({ ok: true, level });
 });
 
-app.get("/api/mod/overview", moderatorOnly, (req, res) => {
-  const files = [USERS_FILE, STORE_FILE, REDEEM_FILE, TEAMS_FILE, REGION_CODES_FILE, DIRECT_MESSAGES_FILE];
+app.get("/api/mod/overview", moderatorOnly, (req, res) => {  const files = [USERS_FILE, STORE_FILE, REDEEM_FILE, TEAMS_FILE, REGION_CODES_FILE, DIRECT_MESSAGES_FILE];
   let storageBytes = files.reduce((sum, file) => { try { return sum + fs.statSync(file).size; } catch { return sum; } }, 0);
   function addDirectoryBytes(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -893,9 +745,7 @@ function handlePrivateChatCommand(socket,text){
   else if(target.side!==side){privateSystemMessage(region,`${target.name} is not currently in group ${match[2]}.`);}
   else{target.side=null;privateSystemMessage(region,`${target.name} was removed from group ${match[2]}.`);}
   return true;
-}
-
-io.on("connection",socket=>{
+}io.on("connection",socket=>{
   socket.on("network:ping",(sentAt,ack)=>{if(typeof ack==="function")ack(Number(sentAt)||Date.now());});
   socket.on("auth",data=>{
     const username=String(data?.username||"").trim().toLowerCase(),u=users[username];
