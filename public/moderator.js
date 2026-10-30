@@ -327,7 +327,7 @@ $("modLogout").addEventListener("click", async () => {
 });
 
 async function redeemGameHandoff() {
-  const key = "spaceJetModeratorHandoff";
+  const key = "spaceJetModeratorToken";
   const raw = localStorage.getItem(key);
 
   if (!raw) return;
