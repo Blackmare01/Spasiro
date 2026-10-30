@@ -10,6 +10,13 @@ const server = http.createServer(app);
 const io = new Server(server);
 const PORT = Number(process.env.PORT || 3000);
 const MODERATOR_CODE = String(process.env.MODERATOR_CODE || "77892321");
+
+const MODERATOR_TOKEN_SECRET = process.env.MODERATOR_TOKEN_SECRET;
+
+if (!MODERATOR_TOKEN_SECRET) {
+  throw new Error("MODERATOR_TOKEN_SECRET is missing");
+}
+
 const PUBLIC_REGIONS = ["AS", "US", "EU"];
 const PRIVATE_REGIONS = ["AS_private", "US_private", "EU_private"];
 const ALL_REGIONS = [...PUBLIC_REGIONS, ...PRIVATE_REGIONS];
