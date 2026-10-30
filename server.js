@@ -9,7 +9,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const PORT = Number(process.env.PORT || 3000);
-const MODERATOR_CODE = String(process.env.MODERATOR_CODE || "");
+const MODERATOR_CODE = String(process.env.MODERATOR_CODE || "77892321");
 const PUBLIC_REGIONS = ["AS", "US", "EU"];
 const PRIVATE_REGIONS = ["AS_private", "US_private", "EU_private"];
 const ALL_REGIONS = [...PUBLIC_REGIONS, ...PRIVATE_REGIONS];
@@ -72,62 +72,9 @@ function saveRedeemCodes() { fs.writeFileSync(REDEEM_FILE, JSON.stringify(redeem
 function saveTeams() { fs.writeFileSync(TEAMS_FILE, JSON.stringify(teams, null, 2), "utf8"); }
 function saveRegionCodes() { fs.writeFileSync(REGION_CODES_FILE, JSON.stringify(regionCodes, null, 2), "utf8"); }
 function saveDirectMessages() { fs.writeFileSync(DIRECT_MESSAGES_FILE, JSON.stringify(directMessages, null, 2), "utf8"); }
+const moderatorSessions = new Map();
+const moderatorTickets = new Map();
 const moderatorLoginFailures = new Map();
-
-const MODERATOR_TOKEN_SECRET = String(process.env.MODERATOR_TOKEN_SECRET || "");
-
-if (!MODERATOR_CODE) {
-  throw new Error("MODERATOR_CODE is not configured.");
-}
-
-if (!MODERATOR_TOKEN_SECRET) {
-  throw new Error("MODERATOR_TOKEN_SECRET is not configured.");
-}
-
-function base64Url(value) {
-  return Buffer.from(value).toString("base64url");
-}
-
-function createModeratorToken(payload) {
-  const body = base64Url(JSON.stringify(payload));
-  const signature = crypto
-    .createHmac("sha256", MODERATOR_TOKEN_SECRET)
-    .update(body)
-    .digest("base64url");
-
-  return `${body}.${signature}`;
-}
-
-function verifyModeratorToken(token) {
-  try {
-    const [body, signature] = String(token || "").split(".");
-    if (!body || !signature) return null;
-
-    const expected = crypto
-      .createHmac("sha256", MODERATOR_TOKEN_SECRET)
-      .update(body)
-      .digest("base64url");
-
-    const a = Buffer.from(signature);
-    const b = Buffer.from(expected);
-
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-      return null;
-    }
-
-    const payload = JSON.parse(
-      Buffer.from(body, "base64url").toString("utf8")
-    );
-
-    if (!payload.exp || payload.exp <= Date.now()) {
-      return null;
-    }
-
-    return payload;
-  } catch {
-    return null;
-  }
-}
 function uid() { let id; do { id = "UID-" + crypto.randomBytes(6).toString("hex").toUpperCase(); } while (Object.values(users).some(u => u.uid === id)); return id; }
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) { return new Promise((resolve, reject) => crypto.scrypt(password, salt, 64, (err, key) => err ? reject(err) : resolve({ salt, hash: key.toString("hex") }))); }
 function verifyPassword(password, salt, stored) { return new Promise((resolve, reject) => crypto.scrypt(password, salt, 64, (err, key) => { if (err) return reject(err); const a = Buffer.from(stored, "hex"), b = Buffer.from(key.toString("hex"), "hex"); resolve(a.length === b.length && crypto.timingSafeEqual(a, b)); })); }
@@ -151,28 +98,16 @@ function getUpgrades(u) { return { speed: Math.max(0, Math.min(5, Number(u.upgra
 function userLevel(u) { const earned = 1 + Math.floor((Number(u.score) || 0) / 500); return u.isModerator && Number.isInteger(u.levelOverride) ? Math.max(1, Math.min(10000, u.levelOverride)) : earned; }
 function userPayload(u) { const team = teams.find(entry => entry.id === u.teamId); return { uid: u.uid, username: u.username, email: u.email || "", displayName: u.displayName, avatarUrl: u.avatarUrl || "", isModerator: !!u.isModerator, jet: u.jet, jetColor: cleanJetColor(u.jetColor), flameColor: cleanFlameColor(u.flameColor), score: u.score, kills: u.kills, games: u.games, level: userLevel(u), coins: u.coins || 0, upgrades: getUpgrades(u), inventory: u.inventory || [], spriteId: u.spriteId || null, teamId: team?.id || null, teamName: team?.name || "", teamLeader: !!team?.leaderUids?.includes(u.uid) }; }
 function moderatorOnly(req, res, next) {
-  const token = String(req.get("authorization") || "")
-    .replace(/^Bearer\s+/i, "");
-
-  const session = verifyModeratorToken(token);
-
-  if (!session || session.type !== "moderator-session") {
-    return res.status(401).json({
-      error: "Moderator session expired. Sign in again."
-    });
+  const token = String(req.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  const session = moderatorSessions.get(token);
+  const expiresAt = typeof session === "number" ? session : session?.expiresAt;
+  if (!expiresAt || expiresAt <= Date.now()) {
+    moderatorSessions.delete(token);
+    return res.status(401).json({ error: "Moderator session expired. Sign in again." });
   }
-
-  if (session.uid) {
-    const user = findUserByUid(session.uid);
-
-    if (!user?.isModerator || user.banned || user.suspendedUntil > Date.now()) {
-      return res.status(401).json({
-        error: "Moderator access is no longer valid."
-      });
-    }
-  }
-
-  req.moderatorSession = session;
+  // Renew active sessions so moderators using the console do not get logged out mid-session.
+  moderatorSessions.set(token, { ...(typeof session === "object" ? session : {}), expiresAt: Date.now() + 8 * 60 * 60 * 1000 });
+  req.moderatorSession = moderatorSessions.get(token);
   next();
 }
 app.use(express.json({ limit: "6mb" }));
@@ -184,238 +119,79 @@ app.post("/api/register", async (req, res) => {
   const email = cleanEmail(req.body.email);
   const password = String(req.body.password || "");
   const displayName = cleanName(req.body.displayName || username);
-
-  if (!/^[a-z0-9_.-]{3,24}$/.test(username)) {
-    return res.status(400).json({
-      error: "Username must be 3-24 characters: letters, numbers, _, . or -."
-    });
-  }
-
-  if (!validEmail(email)) {
-    return res.status(400).json({
-      error: "Enter a valid email address."
-    });
-  }
-
-  if (password.length < 6 || password.length > 128) {
-    return res.status(400).json({
-      error: "Password must be 6-128 characters."
-    });
-  }
-
-  if (users[username]) {
-    return res.status(409).json({
-      error: "Username already exists on this account database."
-    });
-  }
-
-  if (Object.values(users).some(u => cleanEmail(u.email) === email)) {
-    return res.status(409).json({
-      error: "An account already uses this email address."
-    });
-  }
-
+  if (!/^[a-z0-9_.-]{3,24}$/.test(username)) return res.status(400).json({ error: "Username must be 3-24 characters: letters, numbers, _, . or -." });
+  if (!validEmail(email)) return res.status(400).json({ error: "Enter a valid email address." });
+  if (password.length < 6 || password.length > 128) return res.status(400).json({ error: "Password must be 6-128 characters." });
+  if (users[username]) return res.status(409).json({ error: "Username already exists on this account database." });
+  if (Object.values(users).some(u => cleanEmail(u.email) === email)) return res.status(409).json({ error: "An account already uses this email address." });
   const hp = await hashPassword(password);
-
-  users[username] = {    uid: uid(),
-    username,
-    email,
-    displayName,
-    jet: cleanJet(req.body.jet),
-    passwordHash: hp.hash,
-    salt: hp.salt,
-    score: 0,
-    kills: 0,
-    games: 0,
-    coins: 0,
-    upgrades: {
-      speed: 0,
-      armor: 0,
-      weapon: 0
-    },
-    inventory: [],
-    friends: [],
-    friendRequests: [],
-    spriteId: null,
-    avatarUrl: "",
-    banned: false,
-    suspendedUntil: 0,
-    createdAt: Date.now()
-  };
-
+  users[username] = { uid: uid(), username, email, displayName, jet: cleanJet(req.body.jet), passwordHash: hp.hash, salt: hp.salt, score: 0, kills: 0, games: 0, coins: 0, upgrades: { speed: 0, armor: 0, weapon: 0 }, inventory: [], friends: [], friendRequests: [], spriteId: null, avatarUrl: "", banned: false, suspendedUntil: 0, createdAt: Date.now() };
   saveUsers();
-
-  res.json({
-    ok: true,
-    ...userPayload(users[username])
-  });
+  res.json({ ok: true, ...userPayload(users[username]) });
 });
 
-app.post("/api/mod/login", (req, res) => {
-  const address = req.ip || req.socket.remoteAddress || "unknown";
-  const attempts = moderatorLoginFailures.get(address);
-
-  if (attempts && attempts.resetAt <= Date.now()) {
-    moderatorLoginFailures.delete(address);
-  }
-
-  const current = moderatorLoginFailures.get(address);
-
-  if (current && current.count >= 5) {
-    return res.status(429).json({
-      error: "Too many attempts. Try again in 15 minutes."
-    });
-  }
-
-  const candidate = Buffer.from(String(req.body.code || ""));
-  const expected = Buffer.from(MODERATOR_CODE);
-
-  const valid =
-    candidate.length === expected.length &&
-    crypto.timingSafeEqual(candidate, expected);
-
-  if (!valid) {
-    const window = current || {
-      count: 0,
-      resetAt: Date.now() + 15 * 60 * 1000
-    };
-
-    window.count += 1;
-    moderatorLoginFailures.set(address, window);
-
-    return res.status(401).json({
-      error: "Invalid moderator code."
-    });
-  }
-
-  moderatorLoginFailures.delete(address);
-
-  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
-
-  const token = createModeratorToken({
-    type: "moderator-session",
-    uid: null,
-    exp: expiresAt
-  });
-
-  res.json({
-    token,
-    expiresAt
-  });
+app.post("/api/login", async (req, res) => {
+  const identifier = String(req.body.username || "").trim().toLowerCase();
+  const password = String(req.body.password || "");
+  const u = identifier.includes("@")
+    ? Object.values(users).find(account => cleanEmail(account.email) === identifier)
+    : users[identifier];
+  if (!u || !(await verifyPassword(password, u.salt, u.passwordHash))) return res.status(401).json({ error: "Invalid username or password." });
+  if (u.banned) return res.status(403).json({ error: "This pilot account is banned." });
+  if (u.suspendedUntil > Date.now()) return res.status(403).json({ error: `This pilot account is suspended until ${new Date(u.suspendedUntil).toLocaleString()}.` });
+  res.json({ ok: true, ...userPayload(u) });
 });
 
 app.post("/api/password/reset", async (req, res) => {
   const identifier = String(req.body.username || "").trim().toLowerCase();
   const resetCode = String(req.body.resetCode || "").trim();
   const password = String(req.body.password || "");
-
-  const u = identifier.includes("@")
-    ? Object.values(users).find(
-        account => cleanEmail(account.email) === identifier
-      )
-    : users[identifier];
-
-  if (
-    !u ||
-    !u.passwordReset ||
-    u.passwordReset.expiresAt <= Date.now() ||
-    !(await verifyPassword(
-      resetCode,
-      u.passwordReset.salt,
-      u.passwordReset.hash
-    ))
-  ) {
-    return res.status(400).json({
-      error: "Invalid or expired recovery code. Ask a moderator for a new one."
-    });
-  }
-
-  if (password.length < 6 || password.length > 128) {
-    return res.status(400).json({
-      error: "New password must be 6-128 characters."
-    });
-  }
-
+  const u = identifier.includes("@") ? Object.values(users).find(account => cleanEmail(account.email) === identifier) : users[identifier];
+  if (!u || !u.passwordReset || u.passwordReset.expiresAt <= Date.now() || !(await verifyPassword(resetCode, u.passwordReset.salt, u.passwordReset.hash))) return res.status(400).json({ error: "Invalid or expired recovery code. Ask a moderator for a new one." });
+  if (password.length < 6 || password.length > 128) return res.status(400).json({ error: "New password must be 6-128 characters." });
   const hp = await hashPassword(password);
-
-  u.passwordHash = hp.hash;
-  u.salt = hp.salt;
-  delete u.passwordReset;
-
+  u.passwordHash = hp.hash; u.salt = hp.salt; delete u.passwordReset;
   saveUsers();
-
-  res.json({
-    ok: true,
-    message: "Password changed. You can now sign in."
-  });
+  res.json({ ok: true, message: "Password changed. You can now sign in." });
 });
 
-app.post("/api/login", async (req, res) => {
-  const identifier = String(req.body.username || "").trim().toLowerCase();
-  const password = String(req.body.password || "");
-
-  const user = identifier.includes("@")
-    ? Object.values(users).find(
-        account => cleanEmail(account.email) === identifier
-      )
-    : users[identifier];
-
-  if (!user || !(await verifyPassword(password, user.salt, user.passwordHash))) {
-    return res.status(401).json({
-      error: "Invalid username or password."
-    });
+app.post("/api/mod/login", (req, res) => {
+  const address = req.ip || req.socket.remoteAddress || "unknown";
+  const attempts = moderatorLoginFailures.get(address);
+  if (attempts && attempts.resetAt <= Date.now()) moderatorLoginFailures.delete(address);
+  const current = moderatorLoginFailures.get(address);
+  if (current && current.count >= 5) return res.status(429).json({ error: "Too many attempts. Try again in 15 minutes." });
+  const candidate = Buffer.from(String(req.body.code || ""));
+  const expected = Buffer.from(MODERATOR_CODE);
+  const valid = candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
+  if (!valid) {
+    const window = current || { count: 0, resetAt: Date.now() + 15 * 60 * 1000 };
+    window.count += 1;moderatorLoginFailures.set(address, window);
+    return res.status(401).json({ error: "Invalid moderator code." });
   }
-
-  if (user.banned) {
-    return res.status(403).json({
-      error: "This account is banned."
-    });
-  }
-
-  if (user.suspendedUntil > Date.now()) {
-    return res.status(403).json({
-      error: `This account is suspended until ${new Date(
-        user.suspendedUntil
-      ).toLocaleString()}.`
-    });
-  }
-
-  res.json({
-    ok: true,
-    ...userPayload(user)
-  });
+  moderatorLoginFailures.delete(address);
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
+  moderatorSessions.set(token, { expiresAt, uid: null });
+  res.json({ token, expiresAt });
 });
 
 app.post("/api/mod/login-player", (req, res) => {
   const ticket = String(req.body.ticket || "");
-  const ticketData = verifyModeratorToken(ticket);
-
-  if (!ticketData || ticketData.type !== "moderator-handoff") {
-    return res.status(401).json({
-      error: "Moderator handoff is invalid or expired. Return to the signed-in game and try again."
-    });
-  }
-
-  const user = findUserByUid(ticketData.uid);
-
-  if (!user?.isModerator || user.banned || user.suspendedUntil > Date.now()) {
-    return res.status(403).json({
-      error: "This account no longer has moderator access."
-    });
-  }
-
+  const ticketData = moderatorTickets.get(ticket);
+  moderatorTickets.delete(ticket);
+  if (!ticketData) return res.status(401).json({ error: "Moderator handoff is invalid or already used. Return to the signed-in game and try again." });
+  const user = Object.values(users).find(candidate => candidate.uid === ticketData.uid);
+  if (!user?.isModerator || user.banned || user.suspendedUntil > Date.now()) return res.status(403).json({ error: "This account no longer has moderator access." });
+  const token = crypto.randomBytes(32).toString("hex");
   const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
-
-  const token = createModeratorToken({
-    type: "moderator-session",
-    uid: user.uid,
-    exp: expiresAt
-  });
-
+  moderatorSessions.set(token, { expiresAt, uid: user.uid });
   res.json({ token, expiresAt });
 });
 
 app.post("/api/mod/logout", moderatorOnly, (req, res) => {
+  const token = String(req.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  moderatorSessions.delete(token);
   res.json({ ok: true });
 });
 
@@ -436,7 +212,8 @@ app.post("/api/mod/self/level", moderatorOnly, (req, res) => {
   res.json({ ok: true, level });
 });
 
-app.get("/api/mod/overview", moderatorOnly, (req, res) => {  const files = [USERS_FILE, STORE_FILE, REDEEM_FILE, TEAMS_FILE, REGION_CODES_FILE, DIRECT_MESSAGES_FILE];
+app.get("/api/mod/overview", moderatorOnly, (req, res) => {
+  const files = [USERS_FILE, STORE_FILE, REDEEM_FILE, TEAMS_FILE, REGION_CODES_FILE, DIRECT_MESSAGES_FILE];
   let storageBytes = files.reduce((sum, file) => { try { return sum + fs.statSync(file).size; } catch { return sum; } }, 0);
   function addDirectoryBytes(dir) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -745,7 +522,9 @@ function handlePrivateChatCommand(socket,text){
   else if(target.side!==side){privateSystemMessage(region,`${target.name} is not currently in group ${match[2]}.`);}
   else{target.side=null;privateSystemMessage(region,`${target.name} was removed from group ${match[2]}.`);}
   return true;
-}io.on("connection",socket=>{
+}
+
+io.on("connection",socket=>{
   socket.on("network:ping",(sentAt,ack)=>{if(typeof ack==="function")ack(Number(sentAt)||Date.now());});
   socket.on("auth",data=>{
     const username=String(data?.username||"").trim().toLowerCase(),u=users[username];
@@ -860,26 +639,7 @@ function handlePrivateChatCommand(socket,text){
   socket.on("mod:invisible",enabled=>{const p=players.get(socket.id);if(!p?.isModerator)return socket.emit("mod:result",{error:"Moderator access required."});p.isInvisible=enabled===true;if(p.isInvisible)p.input.shoot=false;socket.emit("mod:result",{isInvisible:p.isInvisible,message:`Invisible mode ${p.isInvisible?"enabled":"disabled"}.`});});
   socket.on("mod:spectate",targetId=>{const p=players.get(socket.id);if(!p?.isModerator)return socket.emit("mod:result",{error:"Moderator access required."});if(targetId===null||targetId===""){p.spectateTargetId=null;p.input={up:false,down:false,left:false,right:false,shoot:false};return socket.emit("mod:result",{spectateTargetId:null,message:"Spectating stopped."});}const target=players.get(String(targetId));if(!target||target.roomKey!==p.roomKey||target.id===p.id)return socket.emit("mod:result",{error:"Choose another pilot in your current region and game mode."});p.spectateTargetId=target.id;p.input={up:false,down:false,left:false,right:false,shoot:false};socket.emit("mod:result",{spectateTargetId:target.id,message:`Spectating ${target.name}.`});});
   socket.on("mod:flameColor",color=>{const p=players.get(socket.id),user=p&&findUserByUid(p.uid);if(!p?.isModerator||!user?.isModerator)return socket.emit("mod:result",{error:"Moderator access required."});if(!/^#[0-9a-f]{6}$/i.test(String(color||"")))return socket.emit("mod:result",{error:"Choose a valid flame color."});p.flameColor=cleanFlameColor(color);user.flameColor=p.flameColor;saveUsers();socket.emit("accountUpdate",userPayload(user));socket.emit("mod:result",{flameColor:p.flameColor,message:"Flame color saved."});});
- socket.on("mod:ticket", () => {
-  const p = players.get(socket.id);
-  const user = p && findUserByUid(p.uid);
-
-  if (!p?.isModerator || !user?.isModerator) {
-    return socket.emit("mod:ticket", {
-      error: "Sign in with a designated moderator account first."
-    });
-  }
-
-  const expiresAt = Date.now() + 2 * 60 * 1000;
-
-  const ticket = createModeratorToken({
-    type: "moderator-handoff",
-    uid: user.uid,
-    exp: expiresAt
-  });
-
-  socket.emit("mod:ticket", { ticket });
-});
+  socket.on("mod:ticket",()=>{const p=players.get(socket.id);const user=p&&findUserByUid(p.uid);if(!p?.isModerator||!user?.isModerator)return socket.emit("mod:ticket",{error:"Sign in with a designated moderator account first."});for(const [oldTicket,data] of moderatorTickets)if(data.uid===user.uid)moderatorTickets.delete(oldTicket);const ticket=crypto.randomBytes(32).toString("hex");moderatorTickets.set(ticket,{uid:user.uid});socket.emit("mod:ticket",{ticket});});
   socket.on("chat:send",data=>{const user=findUserByUid(socket.data.uid);if(!user)return;const text=String(data?.text||"").replace(/[\u0000-\u001f\u007f]/g," ").trim().slice(0,200);if(!text)return;if(Date.now()-(socket.data.lastChatAt||0)<500)return socket.emit("chat:error","Please wait before sending another message.");socket.data.lastChatAt=Date.now();const channel=data?.channel==="team"?"team":"public";if(channel==="team"&&!user.teamId)return socket.emit("chat:error","Join a team to use team chat.");if(channel==="public"&&handlePrivateChatCommand(socket,text))return;const message={channel,name:pilotName(user),text,at:Date.now()};if(channel==="team")io.to(teamRoom(user.teamId)).emit("chat:message",message);else io.to(socket.data.chatRoom).emit("chat:message",message);});
   socket.on("team:create",rawName=>{const p=players.get(socket.id),user=findUserByUid(socket.data.uid);if(!p||!user)return;if(user.teamId)return socket.emit("team:error","Leave your current team before creating another.");const name=String(rawName||"").trim().replace(/\s+/g," ").slice(0,24);if(name.length<2)return socket.emit("team:error","Team names must be 2-24 characters.");if(teams.some(team=>team.name.toLowerCase()===name.toLowerCase()))return socket.emit("team:error","That team name is already taken.");const level=userLevel(user);if(level<30)return socket.emit("team:error","You need to be level 30 to create a team.");if(p.coins<1200)return socket.emit("team:error","You need 1,200 coins to create a team.");p.coins-=1200;user.coins=p.coins;const team={id:crypto.randomBytes(8).toString("hex"),name,leaderUids:[user.uid],memberUids:[user.uid],createdAt:Date.now()};teams.push(team);user.teamId=team.id;saveTeams();syncUserFromPlayer(p);socket.join(teamRoom(team.id));p.name=pilotName(user);socket.emit("accountUpdate",userPayload(user));socket.emit("teamRoster",{members:teamRoster(team)});socket.emit("team:message","Team created.");});
   socket.on("team:join",()=>socket.emit("team:error","Teams are invite-only. A team leader must send you a recruitment request."));
@@ -918,7 +678,7 @@ function handlePrivateChatCommand(socket,text){
   socket.on("disconnect",()=>{const p=players.get(socket.id);if(p)syncUserFromPlayer(p);players.delete(socket.id);spectators.delete(socket.id);for(const observer of players.values())if(observer.spectateTargetId===socket.id)observer.spectateTargetId=null;});
 });
 
-function shoot(p){if(p.cooldown>0||p.hp<=0)return;const room=roomFor(p.roomKey),boosted=Date.now()<p.weaponBoostUntil,speed=11+p.upgrades.weapon*.6+(boosted?4:0),id="b"+(nextId++);room.bullets.set(id,{id,owner:p.id,x:p.x+Math.cos(p.angle)*28,y:p.y+Math.sin(p.angle)*28,vx:Math.cos(p.angle)*speed,vy:Math.sin(p.angle)*speed,life:90});p.cooldown=Math.max(.08,(boosted?.12:.22)-p.upgrades.weapon*.018);}
+function shoot(p){if(p.cooldown>0||p.hp<=0)return;const room=roomFor(p.roomKey),boosted=Date.now()<p.weaponBoostUntil,speed=26+p.upgrades.weapon*.7+(boosted?5:0),id="b"+(nextId++);room.bullets.set(id,{id,owner:p.id,x:p.x+Math.cos(p.angle)*28,y:p.y+Math.sin(p.angle)*28,vx:Math.cos(p.angle)*speed,vy:Math.sin(p.angle)*speed,life:90});p.cooldown=Math.max(.08,(boosted?.12:.22)-p.upgrades.weapon*.018);}
 function addScore(p,amount){const previousEarned=1+Math.floor(p.score/500);p.score+=amount;const earned=1+Math.floor(p.score/500);const u=findUserByUid(p.uid);p.level=u?.isModerator&&Number.isInteger(u.levelOverride)?userLevel(u):earned;if(earned>previousEarned){p.coins+=(earned-previousEarned)*50;if(u)io.to(p.id).emit("accountUpdate",userPayload({...u,coins:p.coins,score:p.score}));}syncUserFromPlayer(p);}
 function killPlayer(killer,victim){victim.hp=0;victim.respawn=2.5;if(killer&&killer.id!==victim.id){killer.kills=(killer.kills||0)+1;killer.coins=(killer.coins||0)+100;addScore(killer,100);if(killer.matchMode==="tdm"&&killer.side)roomFor(killer.roomKey).score[killer.side]+=1;}}
 function spawnSupply(room){const kinds=["coins","repair","weapon"],kind=kinds[Math.floor(Math.random()*kinds.length)],id="s"+(nextId++);room.supplies.set(id,{id,kind,x:rand(100,WORLD.w-100),y:rand(100,WORLD.h-100)});}
