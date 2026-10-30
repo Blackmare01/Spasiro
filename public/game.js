@@ -307,16 +307,37 @@ $("redeemSpriteCode").addEventListener("click",()=>{
 document.querySelectorAll(".moderatorLink").forEach(link=>link.addEventListener("click",event=>{
   if(!account?.isModerator)return;
   event.preventDefault();
-  const tab=window.open("about:blank","_blank");
-  if(!tab){$("profileMsg").textContent="Allow pop-ups to open the moderator room.";return;}
-  const timeout=setTimeout(()=>{tab.close();$("profileMsg").textContent="Moderator handoff timed out. Try again.";},5000);
-  socket.once("mod:ticket",handoff=>{
-    clearTimeout(timeout);
-    if(!handoff?.ticket){tab.close();$("profileMsg").textContent=handoff?.error||"Could not open moderator room.";return;}
-    localStorage.setItem("spaceJetModeratorHandoff",JSON.stringify(handoff));
-    tab.location.replace("/moderator.html");
-  });
-  socket.emit("mod:ticket");
+  const tab = window.open("/moderator.html", "_blank");
+
+if (!tab) {
+  $("profileMsg").textContent = "Allow pop-ups to open the moderator room.";
+  return;
+}
+
+const timeout = setTimeout(() => {
+  tab.close();
+  $("profileMsg").textContent = "Moderator handoff timed out. Try again.";
+}, 5000);
+
+socket.once("mod:ticket", handoff => {
+  clearTimeout(timeout);
+
+  if (!handoff?.token) {
+    tab.close();
+    $("profileMsg").textContent =
+      handoff?.error || "Could not open moderator room.";
+    return;
+  }
+
+  localStorage.setItem(
+    "spaceJetModeratorToken",
+    handoff.token
+  );
+
+  tab.location.replace("/moderator.html");
+});
+
+socket.emit("mod:ticket");
 }));
 $("saveProfile").onclick=()=>{
   const name=$("editName").value.trim()||account.username;
