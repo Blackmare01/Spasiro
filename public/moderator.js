@@ -1530,12 +1530,7 @@ setInterval(() => {
     token &&
     !document.hidden
   ) {
-    api(
-      "/api/mod/overview",
-      {
-        cache: "no-store"
-      }
-    ).catch(error => {
+    Promise.all([loadOverview(), loadPilots()]).catch(error => {
       if (token) {
         showLogin(
           error.message
