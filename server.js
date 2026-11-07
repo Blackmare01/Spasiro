@@ -9,7 +9,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 const PORT = Number(process.env.PORT || 3000);
-const MODERATOR_CODE = String(process.env.MODERATOR_CODE || "77892321");
+const MODERATOR_CODE = String(process.env.MODERATOR_CODE || (process.env.NODE_ENV === "production" ? "" : "77892321"));
+
+if (!MODERATOR_CODE) {
+  throw new Error("MODERATOR_CODE is missing. Set a private moderator code in production.");
+}
 
 const MODERATOR_TOKEN_SECRET = String(process.env.MODERATOR_TOKEN_SECRET || (process.env.NODE_ENV === "production" ? "" : crypto.randomBytes(32).toString("hex")));
 
@@ -112,14 +116,10 @@ function userPayload(u) { const team = teams.find(entry => entry.id === u.teamId
 function moderatorOnly(req, res, next) {
   const token = String(req.get("authorization") || "").replace(/^Bearer\s+/i, "");
   const session = moderatorSessions.get(token);
-  const expiresAt = typeof session === "number" ? session : session?.expiresAt;
-  if (!expiresAt || expiresAt <= Date.now()) {
-    moderatorSessions.delete(token);
-    return res.status(401).json({ error: "Moderator session expired. Sign in again." });
-  }
-  // Renew active sessions so moderators using the console do not get logged out mid-session.
-  moderatorSessions.set(token, { ...(typeof session === "object" ? session : {}), expiresAt: Date.now() + 8 * 60 * 60 * 1000 });
-  req.moderatorSession = moderatorSessions.get(token);
+  if (!session) return res.status(401).json({ error: "Moderator session is no longer available. Sign in again." });
+  // Moderator sessions intentionally have no time limit. They remain valid until
+  // the moderator logs out or this single-process server restarts.
+  req.moderatorSession = session;
   next();
 }
 app.use(express.json({ limit: "6mb" }));
@@ -188,9 +188,8 @@ app.post("/api/mod/login", (req, res) => {
   }
   moderatorLoginFailures.delete(address);
   const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
-  moderatorSessions.set(token, { expiresAt, uid: null });
-  res.json({ token, expiresAt });
+  moderatorSessions.set(token, { uid: null });
+  res.json({ token });
 });
 
 app.post("/api/mod/login-player", (req, res) => {
@@ -201,9 +200,8 @@ app.post("/api/mod/login-player", (req, res) => {
   const user = Object.values(users).find(candidate => candidate.uid === ticketData.uid);
   if (!user?.isModerator || user.banned || user.suspendedUntil > Date.now()) return res.status(403).json({ error: "This account no longer has moderator access." });
   const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = Date.now() + 8 * 60 * 60 * 1000;
-  moderatorSessions.set(token, { expiresAt, uid: user.uid });
-  res.json({ token, expiresAt });
+  moderatorSessions.set(token, { uid: user.uid });
+  res.json({ token });
 });
 
 app.post("/api/mod/logout", moderatorOnly, (req, res) => {

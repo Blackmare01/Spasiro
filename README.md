@@ -11,7 +11,7 @@ Spasiro is a multiplayer space shooter created by Vector Viper, with persistent 
 
 The server stores accounts in `data/users.json`. Keep this file to preserve pilot progress. If port 3000 is already occupied, stop the other server process before starting Spasiro.
 
-For production, set `MODERATOR_TOKEN_SECRET` to a long random value in the environment before starting Node. Do not commit that secret to GitHub. Local development generates a temporary secret automatically when one is not configured.
+For production, set both `MODERATOR_CODE` to a private code and `MODERATOR_TOKEN_SECRET` to a long random value in the environment before starting Node. Do not commit either value to GitHub. The local moderator code is `77892321`; production refuses to start without a code. Local development generates a temporary token secret automatically when one is not configured.
 
 ## Hosting the online game
 
@@ -23,5 +23,5 @@ AS, US, and EU are currently room labels on the same server, not separate region
 
 ## Moderator room
 
-Open `http://localhost:3000/moderator.html` and enter the moderator code. To use a different code on your server, set `MODERATOR_CODE` before starting Node; the default is stored and checked server-side. Moderator sessions expire after eight hours, and repeated failed code attempts are rate limited.
+Open `http://localhost:3000/moderator.html` and enter the moderator code. In local development the code is `77892321`; production must use a private `MODERATOR_CODE` environment variable. Moderator sessions are saved in this browser and do not expire while the server process remains running. Logging out or restarting the server ends them. Repeated failed code attempts are rate limited.
 
