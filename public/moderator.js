@@ -1,7 +1,7 @@
 const $ = id => document.getElementById(id);
 
 const tokenKey = "spaceJetModeratorSession";
-let token = sessionStorage.getItem(tokenKey) || "";
+let token = localStorage.getItem(tokenKey) || "";
 let pilots = [];
 let published = [];
 let selectedPng = "";
@@ -29,7 +29,7 @@ function sizeLabel(bytes) {
 
 function showLogin(message = "") {
   token = "";
-  sessionStorage.removeItem(tokenKey);
+  localStorage.removeItem(tokenKey);
 
   $("modConsole").classList.add("hidden");
   $("modLogin").classList.remove("hidden");
@@ -56,7 +56,7 @@ async function api(url, options = {}) {
 
   if (response.status === 401 && token) {
     showLogin(
-      "Moderator session expired or the game server restarted. Enter the moderator code again."
+      "Moderator session is no longer available. The game server may have restarted, or this session was logged out. Sign in again."
     );
   }
 
@@ -108,7 +108,7 @@ $("loginForm").addEventListener("submit", async event => {
 
     token = data.token;
 
-    sessionStorage.setItem(tokenKey, token);
+    localStorage.setItem(tokenKey, token);
 
     $("modCode").value = "";
     $("loginMessage").textContent = "";
@@ -1480,7 +1480,7 @@ async function redeemGameHandoff() {
 
     localStorage.removeItem(key);
 
-    sessionStorage.setItem(
+    localStorage.setItem(
       tokenKey,
       token
     );
@@ -1493,7 +1493,7 @@ async function redeemGameHandoff() {
   } catch (error) {
     token = "";
 
-    sessionStorage.removeItem(
+    localStorage.removeItem(
       tokenKey
     );
 
@@ -1530,17 +1530,10 @@ setInterval(() => {
     token &&
     !document.hidden
   ) {
-    api(
-      "/api/mod/overview",
-      {
-        cache: "no-store"
-      }
-    ).catch(error => {
-      if (token) {
-        showLogin(
-          error.message
-        );
-      }
+    Promise.all([loadOverview(), loadPilots()]).catch(error => {
+      // A temporary network/API failure should not erase the moderator token.
+      // The api() helper returns to login only when the server explicitly says 401.
+      if (token) $("pilotMessage").textContent = "Could not refresh moderator data: " + error.message;
     });
   }
 }, 5 * 60 * 1000);

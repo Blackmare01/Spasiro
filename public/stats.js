@@ -67,3 +67,4 @@ document.addEventListener("keydown", event => {
   }
 });
 loadStats();
+setInterval(() => { if (!document.hidden) loadStats(); }, 30000);
