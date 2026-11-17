@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+const API_BASE = String(window.SPASIRO_API_BASE || "").replace(/\/$/, "");
 const tokenKey = "spaceJetModeratorSession";
 let token = sessionStorage.getItem(tokenKey) || "";
 let pilots = [];
@@ -28,7 +29,7 @@ async function api(url, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (options.body) headers["Content-Type"] = "application/json";
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(API_BASE + url, { ...options, headers });
   const data = await response.json().catch(() => ({}));
   if (response.status === 401 && token) showLogin("Moderator session expired or the game server restarted. Enter the moderator code again.");
   if (!response.ok) {
@@ -335,7 +336,7 @@ async function redeemGameHandoff() {
     const handoff = JSON.parse(raw);
     if (!handoff.ticket) throw new Error("Moderator handoff is invalid. Return to the signed-in game and try again.");
     $("loginMessage").textContent = "Verifying moderator account…";
-    const response = await fetch("/api/mod/login-player", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket: handoff.ticket }) });
+    const response = await fetch(API_BASE + "/api/mod/login-player", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ticket: handoff.ticket }) });
     const data = await response.json().catch(() => ({}));
     if (!response.ok || !data.token) throw new Error(data.error || "Could not verify moderator account.");
     token = data.token;

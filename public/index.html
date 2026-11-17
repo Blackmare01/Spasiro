@@ -176,6 +176,18 @@
     </div>
   </div>
 </div>
-<script>document.write('<script src="'+(window.SPASIRO_API_BASE||'')+'/socket.io/socket.io.js"><\\/script>')</script><script src="/game.js"></script>
+<script>
+  const socketClient = document.createElement("script");
+  socketClient.src = (window.SPASIRO_API_BASE || "") + "/socket.io/socket.io.js";
+  socketClient.onload = () => {
+    const gameClient = document.createElement("script");
+    gameClient.src = "/game.js";
+    document.body.appendChild(gameClient);
+  };
+  socketClient.onerror = () => {
+    document.getElementById("authMsg").textContent = "Could not load the game connection. Check the server URL and reload.";
+  };
+  document.head.appendChild(socketClient);
+</script>
 </body>
 </html>
