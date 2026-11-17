@@ -4,6 +4,7 @@ const { Server } = require("socket.io");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const os = require("os");
 
 const app = express();
 const server = http.createServer(app);
@@ -25,8 +26,35 @@ const PUBLIC_REGIONS = ["AS", "US", "EU"];
 const PRIVATE_REGIONS = ["AS_private", "US_private", "EU_private"];
 const ALL_REGIONS = [...PUBLIC_REGIONS, ...PRIVATE_REGIONS];
 
-const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, "data"));
-const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(__dirname, "public", "uploads"));
+function writableDirectory(envName, defaultPath, runtimeName) {
+  const configuredPath = process.env[envName];
+  const preferredPath = path.resolve(configuredPath || defaultPath);
+  const candidates = configuredPath
+    ? [preferredPath]
+    : [preferredPath, path.join(os.tmpdir(), "spasiro", runtimeName)];
+
+  for (const candidate of candidates) {
+    try {
+      fs.mkdirSync(candidate, { recursive: true });
+      const probe = path.join(candidate, `.write-test-${process.pid}-${crypto.randomBytes(4).toString("hex")}`);
+      fs.writeFileSync(probe, "ok", { flag: "wx" });
+      fs.unlinkSync(probe);
+      return { path: candidate, persistent: candidate === preferredPath };
+    } catch (error) {
+      if (configuredPath || candidate === candidates[candidates.length - 1]) {
+        throw new Error(`${envName || "Application data directory"} is not writable (${candidate}): ${error.message}`);
+      }
+      console.warn(`[storage] ${candidate} is read-only; using temporary storage. Set ${envName} to a persistent writable directory to retain data across restarts.`);
+    }
+  }
+  throw new Error(`${envName} could not find a writable directory.`);
+}
+
+const dataStorage = writableDirectory("DATA_DIR", path.join(__dirname, "data"), "data");
+const uploadStorage = writableDirectory("UPLOADS_DIR", path.join(__dirname, "public", "uploads"), "uploads");
+const DATA_DIR = dataStorage.path;
+const DATA_PERSISTENT = dataStorage.persistent;
+const UPLOADS_DIR = uploadStorage.path;
 const USERS_FILE = path.join(DATA_DIR, "users.json");
 const STORE_FILE = path.join(DATA_DIR, "store.json");
 const REDEEM_FILE = path.join(DATA_DIR, "redeem-codes.json");
@@ -128,7 +156,7 @@ app.use("/uploads", express.static(SPRITE_DIR));
 app.get("/api/server", (req, res) => {
   let dataWritable = true;
   try { fs.accessSync(DATA_DIR, fs.constants.W_OK); } catch { dataWritable = false; }
-  res.json({ online: true, players: players.size, platform: process.env.VERCEL ? "vercel-functions" : "node", dataWritable, requiresSingleProcess: true });
+  res.json({ online: true, players: players.size, platform: process.env.VERCEL ? "vercel-functions" : "node", dataWritable, dataPersistent: DATA_PERSISTENT, requiresSingleProcess: true });
 });
 
 app.post("/api/register", async (req, res) => {
