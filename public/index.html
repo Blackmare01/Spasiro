@@ -178,7 +178,7 @@
 </div>
 <script>
   const socketClient = document.createElement("script");
-  socketClient.src = (window.SPASIRO_API_BASE || "") + "/socket.io/socket.io.js";
+  socketClient.src = (window.SPASIRO_API_BASE || "") + "/api/socket.io/socket.io.js";
   socketClient.onload = () => {
     const gameClient = document.createElement("script");
     gameClient.src = "/game.js";

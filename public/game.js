@@ -1,6 +1,7 @@
 const $=id=>document.getElementById(id);
 const API_BASE=String(window.SPASIRO_API_BASE||"").replace(/\/$/,"");
-let socket=io(API_BASE||undefined,{autoConnect:false});
+const SOCKET_IO_PATH="/api/socket.io";
+let socket=io(API_BASE||undefined,{autoConnect:false,path:SOCKET_IO_PATH});
 let mode="login", account=null, myId=null, world={w:2400,h:1400}, state={entities:[],bullets:[],asteroids:[]};
 let keys={}, mouseDown=false, camera={x:0,y:0}, selectedJet="blue", editJet="blue", spectateTargetId=null, invisibleMode=false, spectateRosterKey="";
 let currentRegion="AS",currentMatchMode="ffa",privateSpectator=false;
@@ -52,7 +53,7 @@ $("authBtn").onclick=async()=>{
 function connectServer(){
   if(!account)return;
   if(socket.connected) socket.disconnect();
-  socket=io(API_BASE||undefined,{autoConnect:false});
+  socket=io(API_BASE||undefined,{autoConnect:false,path:SOCKET_IO_PATH});
   socket.on("connect",()=>{socket.emit("auth",{token:account.token,region:"AS",matchMode:"ffa"});startPingMonitor();});
   socket.on("disconnect",()=>{clearInterval(pingTimer);pingTimer=0;pingValue=null;pingRequestPending=false;updatePingDisplay();});
   socket.on("authError",m=>{localStorage.removeItem("spaceJetAccount");account=null;myId=null;$("game").classList.add("hidden");$("auth").classList.remove("hidden");$("authMsg").textContent=m;});
