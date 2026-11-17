@@ -4,6 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SPASIRO // ONLINE</title>
 <link rel="stylesheet" href="/style.css">
+<script src="/config.js"></script>
 </head>
 <body>
 <div id="auth">
@@ -69,8 +70,6 @@
   <section id="modQuickPanel" class="modQuickPanel hidden" aria-label="Moderator gameplay controls">
     <div class="modQuickHeading">MODERATOR GAMEPLAY</div>
     <button id="invisibleToggle" type="button">GO INVISIBLE</button>
-    <label for="modCoinsAmount">SET YOUR COINS</label>
-    <div class="coinsBox"><input id="modCoinsAmount" type="number" min="0" step="1" inputmode="numeric" placeholder="Enter coin amount"><button id="modSetCoins" type="button">SET</button></div>
     <label for="modSpectateTarget">SPECTATE PILOT</label>
     <select id="modSpectateTarget"><option value="">Choose a pilot in this sector…</option></select>
     <div class="modSpectateActions"><button id="startModSpectate" type="button">SPECTATE</button><button id="stopModSpectate" type="button">STOP</button></div>
@@ -141,15 +140,11 @@
         <div class="sectionTitle">SQUADRON // TEAM</div>
         <div id="teamCurrent" class="shopNote">You are not in a team.</div>
         <div id="teamActions">
-          <p class="shopNote">Teams are invite-only. A team leader can send you a recruitment request, which you can accept below.</p>
           <label>TEAM NAME<input id="teamNameInput" maxlength="24" placeholder="Choose any team name"></label>
           <button id="createTeamBtn" class="primary">CREATE TEAM · LV 30 · 1,200 COINS</button>
+          <label>JOIN TEAM<input id="joinTeamName" maxlength="24" placeholder="Enter exact team name"></label>
+          <button id="joinTeamBtn" class="backButton">JOIN TEAM</button>
         </div>
-        <div id="teamRecruitControls" class="hidden">
-          <label>RECRUIT PLAYER · USERNAME OR UID<input id="teamRecruitName" maxlength="40" placeholder="Enter exact username or UID"></label>
-          <button id="sendTeamRequestBtn" class="backButton">SEND RECRUITMENT REQUEST</button>
-        </div>
-        <div id="teamInvites"></div>
         <div id="teamRoster"></div>
         <div id="teamMsg" role="status"></div>
         <a class="statsPageLink" href="/teams.html" target="_blank" rel="noopener">TEAM STATISTICS ↗</a>
@@ -160,7 +155,7 @@
         <div class="coinsBox"><select id="chatChannel" aria-label="Chat channel"><option value="public">REGION CHAT</option><option value="team">TEAM PRIVATE CHAT</option></select></div>
         <div id="chatMessages" class="chatMessages" aria-live="polite"></div>
         <div class="coinsBox"><input id="chatInput" maxlength="200" placeholder="Write a message…" style="flex:1;min-width:0;width:auto"><button id="sendChatBtn" class="buyBtn">SEND</button></div>
-        <p id="privateChatCommandHelp" class="shopNote hidden">Private server commands (access code holders): <code>/game-mode ffa</code> or <code>/game-mode tdm</code>; <code>/game-group player_name to 1</code> or <code>/game-group player_name to 2</code>; remove with <code>/game-group player_name remove from 1</code> or <code>... from 2</code>; add a spectator with <code>/add player to game player_name</code>. Moderator commands: <code>/reset</code> resets the current match; <code>/server down</code> revokes this server's code and disconnects everyone in it.</p>
+        <p id="privateChatCommandHelp" class="shopNote hidden">Private server commands (access code holders): <code>/game-mode ffa</code> or <code>/game-mode tdm</code>; <code>/game-group player_name to 1</code> or <code>/game-group player_name to 2</code>; remove with <code>/game-group player_name remove from 1</code> or <code>... from 2</code>.</p>
       </section>
 
       <section id="observerPage" class="menuPage hidden">
@@ -181,6 +176,6 @@
     </div>
   </div>
 </div>
-<script src="/socket.io/socket.io.js"></script><script src="/game.js"></script>
+<script>document.write('<script src="'+(window.SPASIRO_API_BASE||'')+'/socket.io/socket.io.js"><\\/script>')</script><script src="/game.js"></script>
 </body>
 </html>

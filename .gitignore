@@ -1,0 +1,7 @@
+node_modules/
+data/users.json
+data/direct-messages.json
+data/region-codes.json
+data/redeem-codes.json
+data/backups/
+public/uploads/

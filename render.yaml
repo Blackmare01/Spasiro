@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: spasiro
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/server
+    disk:
+      name: spasiro-data
+      mountPath: /var/lib/spasiro
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: DATA_DIR
+        value: /var/lib/spasiro
+      - key: UPLOADS_DIR
+        value: /var/lib/spasiro/uploads
+      - key: MODERATOR_CODE
+        generateValue: true

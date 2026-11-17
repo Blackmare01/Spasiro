@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+const API_BASE=String(window.SPASIRO_API_BASE||"").replace(/\/$/,"");
 const number = value => new Intl.NumberFormat().format(value || 0);
 let pilots = [];
 
@@ -33,7 +34,7 @@ async function loadStats() {
   refresh.classList.add("loading");
   $("error").textContent = "";
   try {
-    const response = await fetch("/api/stats", { cache: "no-store" });
+    const response = await fetch(API_BASE+"/api/stats", { cache: "no-store" });
     if (!response.ok) throw new Error(`Command returned ${response.status}`);
     if (!response.headers.get("content-type")?.includes("application/json")) {
       throw new Error("Stats API not found on the running server. Restart the game server to load the latest update.");
@@ -67,3 +68,4 @@ document.addEventListener("keydown", event => {
   }
 });
 loadStats();
+setInterval(() => { if (!document.hidden) loadStats(); }, 30000);
