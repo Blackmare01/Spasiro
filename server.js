@@ -1,6 +1,7 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
+const postgres = require("postgres").default;
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -11,6 +12,11 @@ const server = http.createServer(app);
 const allowedOrigin = process.env.CLIENT_ORIGIN || process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}` || true;
 const io = new Server(server, { path: "/api/socket.io", cors: { origin: allowedOrigin, methods: ["GET", "POST"] } });
 const PORT = Number(process.env.PORT || 3000);
+const DATABASE_URL = String(process.env.DATABASE_URL || "").trim();
+let cloudSql = null;
+let cloudStorageReady = false;
+let cloudStorageError = null;
+const cloudWriteQueues = new Map();
 const MODERATOR_CODE = String(process.env.MODERATOR_CODE || "77892321");
 const PUBLIC_REGIONS = ["AS", "US", "EU"];
 const PRIVATE_REGIONS = ["AS_private", "US_private", "EU_private"];
@@ -83,30 +89,130 @@ let redeemCodes = loadRedeemCodes();
 let teams = loadTeams();
 let regionCodes = loadRegionCodes();
 let directMessages = loadDirectMessages();
-for (const u of Object.values(users)) {
-  u.coins = Number.isFinite(u.coins) ? u.coins : 0;
-  u.upgrades = u.upgrades && typeof u.upgrades === "object" ? u.upgrades : {};
-  u.upgrades.speed = Number.isFinite(u.upgrades.speed) ? u.upgrades.speed : 0;
-  u.upgrades.armor = Number.isFinite(u.upgrades.armor) ? u.upgrades.armor : 0;
-  u.upgrades.weapon = Number.isFinite(u.upgrades.weapon) ? u.upgrades.weapon : 0;
-  u.inventory = Array.isArray(u.inventory) ? u.inventory : [];
-  u.friends = Array.isArray(u.friends) ? u.friends : [];
-  u.friendRequests = Array.isArray(u.friendRequests) ? u.friendRequests : [];
-  u.friends = Array.isArray(u.friends) ? u.friends : [];
-  u.friendRequests = Array.isArray(u.friendRequests) ? u.friendRequests : [];
-  u.spriteId = typeof u.spriteId === "string" ? u.spriteId : null;
-  u.banned = u.banned === true;
-  u.isModerator = u.isModerator === true;
-  u.suspendedUntil = Number(u.suspendedUntil) || 0;
+function normalizeUsers() {
+  for (const u of Object.values(users)) {
+    u.coins = Number.isFinite(u.coins) ? u.coins : 0;
+    u.upgrades = u.upgrades && typeof u.upgrades === "object" ? u.upgrades : {};
+    u.upgrades.speed = Number.isFinite(u.upgrades.speed) ? u.upgrades.speed : 0;
+    u.upgrades.armor = Number.isFinite(u.upgrades.armor) ? u.upgrades.armor : 0;
+    u.upgrades.weapon = Number.isFinite(u.upgrades.weapon) ? u.upgrades.weapon : 0;
+    u.inventory = Array.isArray(u.inventory) ? u.inventory : [];
+    u.friends = Array.isArray(u.friends) ? u.friends : [];
+    u.friendRequests = Array.isArray(u.friendRequests) ? u.friendRequests : [];
+    u.spriteId = typeof u.spriteId === "string" ? u.spriteId : null;
+    u.banned = u.banned === true;
+    u.isModerator = u.isModerator === true;
+    u.suspendedUntil = Number(u.suspendedUntil) || 0;
+  }
 }
+normalizeUsers();
 let saveTimer = null;
-function writeUsers() { fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), "utf8"); }
+function persistJsonFile(file, key, value) {
+  fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
+  if (cloudSql) void queueCloudState(key, value).catch(() => {});
+}
+function writeUsers() { persistJsonFile(USERS_FILE, "users", users); }
 function saveUsers() { clearTimeout(saveTimer); saveTimer = setTimeout(writeUsers, 100); }
-function saveStore() { fs.writeFileSync(STORE_FILE, JSON.stringify(storeItems, null, 2), "utf8"); }
-function saveRedeemCodes() { fs.writeFileSync(REDEEM_FILE, JSON.stringify(redeemCodes, null, 2), "utf8"); }
-function saveTeams() { fs.writeFileSync(TEAMS_FILE, JSON.stringify(teams, null, 2), "utf8"); }
-function saveRegionCodes() { fs.writeFileSync(REGION_CODES_FILE, JSON.stringify(regionCodes, null, 2), "utf8"); }
-function saveDirectMessages() { fs.writeFileSync(DIRECT_MESSAGES_FILE, JSON.stringify(directMessages, null, 2), "utf8"); }
+function saveStore() { persistJsonFile(STORE_FILE, "store", storeItems); }
+function saveRedeemCodes() { persistJsonFile(REDEEM_FILE, "redeem-codes", redeemCodes); }
+function saveTeams() { persistJsonFile(TEAMS_FILE, "teams", teams); }
+function saveRegionCodes() { persistJsonFile(REGION_CODES_FILE, "region-codes", regionCodes); }
+function saveDirectMessages() { persistJsonFile(DIRECT_MESSAGES_FILE, "direct-messages", directMessages); }
+
+async function queueCloudState(key, value) {
+  if (!cloudSql) return;
+  const payload = JSON.stringify(value);
+  const previous = cloudWriteQueues.get(key) || Promise.resolve();
+  const write = previous.catch(() => {}).then(() => cloudSql`
+    INSERT INTO spasiro_state (state_key, payload, updated_at)
+    VALUES (${key}, ${payload}::jsonb, now())
+    ON CONFLICT (state_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()
+  `);
+  cloudWriteQueues.set(key, write);
+  try {
+    await write;
+    cloudStorageError = null;
+  } catch (error) {
+    cloudStorageError = error;
+    console.error(`[storage] PostgreSQL write failed for ${key}: ${error.message}`);
+    throw error;
+  }
+}
+
+async function persistCloudUpload(url, image, contentType) {
+  if (!cloudSql) return;
+  try {
+    await cloudSql`
+      INSERT INTO spasiro_uploads (url, content_type, body, updated_at)
+      VALUES (${url}, ${contentType}, ${image}, now())
+      ON CONFLICT (url) DO UPDATE SET content_type = EXCLUDED.content_type, body = EXCLUDED.body, updated_at = now()
+    `;
+    cloudStorageError = null;
+  } catch (error) {
+    cloudStorageError = error;
+    console.error(`[storage] PostgreSQL upload write failed: ${error.message}`);
+    throw error;
+  }
+}
+
+async function initializeCloudStorage() {
+  if (!DATABASE_URL) return;
+  cloudSql = postgres(DATABASE_URL, { max: 4, connect_timeout: 30, idle_timeout: 20 });
+  await cloudSql`SELECT 1`;
+  await cloudSql`CREATE TABLE IF NOT EXISTS spasiro_state (
+    state_key text PRIMARY KEY,
+    payload jsonb NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`;
+  await cloudSql`CREATE TABLE IF NOT EXISTS spasiro_uploads (
+    url text PRIMARY KEY,
+    content_type text NOT NULL,
+    body bytea NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+  )`;
+  const rows = await cloudSql`SELECT state_key, payload FROM spasiro_state`;
+  const found = new Set();
+  for (const row of rows) {
+    found.add(row.state_key);
+    if (row.state_key === "users") users = row.payload;
+    else if (row.state_key === "store") storeItems = row.payload;
+    else if (row.state_key === "redeem-codes") redeemCodes = row.payload;
+    else if (row.state_key === "teams") teams = row.payload;
+    else if (row.state_key === "region-codes") regionCodes = row.payload;
+    else if (row.state_key === "direct-messages") directMessages = row.payload;
+  }
+  normalizeUsers();
+  const initialState = {
+    users, store: storeItems, "redeem-codes": redeemCodes, teams,
+    "region-codes": regionCodes, "direct-messages": directMessages
+  };
+  const localFiles = {
+    users: USERS_FILE, store: STORE_FILE, "redeem-codes": REDEEM_FILE,
+    teams: TEAMS_FILE, "region-codes": REGION_CODES_FILE, "direct-messages": DIRECT_MESSAGES_FILE
+  };
+  for (const [key, value] of Object.entries(initialState)) {
+    fs.writeFileSync(localFiles[key], JSON.stringify(value, null, 2), "utf8");
+    if (!found.has(key)) await queueCloudState(key, value);
+  }
+  const storedUploads = new Set((await cloudSql`SELECT url FROM spasiro_uploads`).map(row => row.url));
+  async function importUploads(directory) {
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) { await importUploads(fullPath); continue; }
+      const relativePath = path.relative(SPRITE_DIR, fullPath).split(path.sep).join("/");
+      const url = `/uploads/${relativePath}`;
+      if (storedUploads.has(url)) continue;
+      const extension = path.extname(entry.name).toLowerCase();
+      const contentType = extension === ".png" ? "image/png" : extension === ".jpg" || extension === ".jpeg" ? "image/jpeg" : null;
+      if (!contentType) continue;
+      await persistCloudUpload(url, fs.readFileSync(fullPath), contentType);
+      storedUploads.add(url);
+    }
+  }
+  await importUploads(SPRITE_DIR);
+  cloudStorageReady = true;
+  console.log("[storage] Connected to PostgreSQL; game state is cloud-persistent.");
+}
 const moderatorSessions = new Map();
 const moderatorTickets = new Map();
 const moderatorLoginFailures = new Map();
@@ -152,10 +258,27 @@ app.use((req,res,next)=>{const origin=req.headers.origin;const configured=proces
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(SPRITE_DIR));
 app.use("/uploads", express.static(SPRITE_DIR));
-app.get("/api/server", (req, res) => {
+app.get("/uploads/*", async (req, res, next) => {
+  if (!cloudSql) return next();
+  const requestedUrl = req.path;
+  if (!requestedUrl.startsWith("/uploads/") || requestedUrl.split("/").includes("..")) return res.sendStatus(400);
+  try {
+    const [upload] = await cloudSql`SELECT content_type, body FROM spasiro_uploads WHERE url = ${requestedUrl}`;
+    if (!upload) return next();
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.type(upload.content_type).send(upload.body);
+  } catch (error) { next(error); }
+});
+app.get("/api/server", async (req, res) => {
   let dataWritable = true;
-  try { fs.accessSync(DATA_DIR, fs.constants.W_OK); } catch { dataWritable = false; }
-  res.json({ online: true, players: players.size, platform: process.env.VERCEL ? "vercel-functions" : "node", dataWritable, dataPersistent: DATA_PERSISTENT, requiresSingleProcess: true });
+  if (cloudSql) {
+    try { await cloudSql`SELECT 1`; cloudStorageReady = true; cloudStorageError = null; }
+    catch (error) { dataWritable = false; cloudStorageError = error; }
+  } else {
+    try { fs.accessSync(DATA_DIR, fs.constants.W_OK); } catch { dataWritable = false; }
+  }
+  const dataPersistent = cloudStorageReady || DATA_PERSISTENT;
+  res.json({ online: true, players: players.size, platform: process.env.VERCEL ? "vercel-functions" : "node", dataWritable, dataPersistent, storage: cloudStorageReady ? "postgres" : DATA_PERSISTENT ? "filesystem" : "temporary", requiresSingleProcess: true });
 });
 
 app.post("/api/register", async (req, res) => {
@@ -170,6 +293,8 @@ app.post("/api/register", async (req, res) => {
   if (Object.values(users).some(u => cleanEmail(u.email) === email)) return res.status(409).json({ error: "An account already uses this email address." });
   const hp = await hashPassword(password);
   users[username] = { uid: uid(), username, email, displayName, jet: cleanJet(req.body.jet), passwordHash: hp.hash, salt: hp.salt, score: 0, kills: 0, games: 0, coins: 0, upgrades: { speed: 0, armor: 0, weapon: 0 }, inventory: [], friends: [], friendRequests: [], spriteId: null, avatarUrl: "", banned: false, suspendedUntil: 0, createdAt: Date.now() };
+  try { if (cloudSql) await queueCloudState("users", users); }
+  catch { delete users[username]; return res.status(503).json({ error: "Cloud storage could not save this account. Please try again." }); }
   saveUsers();
   res.json({ ok: true, token: issueSession(users[username]), ...userPayload(users[username]) });
 });
@@ -336,7 +461,7 @@ app.post("/api/mod/users/:uid/status", moderatorOnly, (req, res) => {
 
 app.get("/api/shop/sprites", (req, res) => res.json({ items: storeItems }));
 
-app.post("/api/mod/items", moderatorOnly, (req, res) => {
+app.post("/api/mod/items", moderatorOnly, async (req, res) => {
   const name = String(req.body.name || "").trim().slice(0, 32);
   const distribution = String(req.body.distribution || "shop");
   const price = distribution === "shop" ? Math.floor(Number(req.body.price)) : 100;
@@ -355,6 +480,8 @@ app.post("/api/mod/items", moderatorOnly, (req, res) => {
   const id = crypto.randomBytes(9).toString("hex");
   const filename = `sprite-${id}.png`;
   fs.writeFileSync(path.join(SPRITE_DIR, filename), image, { flag: "wx" });
+  try { await persistCloudUpload(`/uploads/${filename}`, image, "image/png"); }
+  catch { try { fs.unlinkSync(path.join(SPRITE_DIR, filename)); } catch {} return res.status(503).json({ error: "Cloud storage could not save this sprite. Please try again." }); }
   const item = { id, name, price, distribution, available: distribution === "shop", imageUrl: `/uploads/${filename}`, width, height, createdAt: Date.now() };
   storeItems.push(item);
   saveStore();
@@ -652,16 +779,18 @@ io.on("connection",socket=>{
     const user=findUserByUid(socket.data.uid),friend=findUserByUid(String(friendUid||""));if(!user||!friend)return;
     user.friends=(user.friends||[]).filter(uid=>uid!==friend.uid);friend.friends=(friend.friends||[]).filter(uid=>uid!==user.uid);saveUsers();emitFriendsData(user);emitFriendsData(friend);
   });
-  socket.on("profile:avatar",(dataUrl,ack)=>{
+  socket.on("profile:avatar",async (dataUrl,ack)=>{
     const fail=message=>{socket.emit("profile:avatarError",message);if(typeof ack==="function")ack({error:message});};
     const player=players.get(socket.id),user=findUserByUid(socket.data.uid);if(!user)return fail("Sign in to the game before changing your photo.");
     const match=String(dataUrl||"").match(/^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/);if(!match||match[1].length>600000)return fail("Choose a photo smaller than 450 KB after resizing.");
     const image=Buffer.from(match[1],"base64");if(image.length>450*1024||image.length<4||image[0]!==0xff||image[1]!==0xd8||image[2]!==0xff)return fail("The profile photo must be a valid JPG image.");
-    try{fs.writeFileSync(path.join(PROFILE_DIR,`${user.uid}.jpg`),image);}catch{return fail("Could not save the profile photo on the game server.");}
+    try{fs.writeFileSync(path.join(PROFILE_DIR,`${user.uid}.jpg`),image);await persistCloudUpload(`/uploads/profiles/${user.uid}.jpg`,image,"image/jpeg");}catch{return fail("Could not save the profile photo on the game server.");}
     user.avatarUrl=`/uploads/profiles/${user.uid}.jpg?v=${Date.now()}`;if(player)player.avatarUrl=user.avatarUrl;saveUsers();socket.emit("accountUpdate",userPayload(user));if(typeof ack==="function")ack({ok:true,avatarUrl:user.avatarUrl});
   });
-  socket.on("profile:avatarRemove",()=>{
+  socket.on("profile:avatarRemove",async ()=>{
     const player=players.get(socket.id),user=findUserByUid(socket.data.uid);if(!user)return;
+    try { if(cloudSql) await cloudSql`DELETE FROM spasiro_uploads WHERE url = ${`/uploads/profiles/${user.uid}.jpg`}`; }
+    catch { return socket.emit("profile:avatarError","Could not remove the profile photo from cloud storage."); }
     try{fs.unlinkSync(path.join(PROFILE_DIR,`${user.uid}.jpg`));}catch{}user.avatarUrl="";if(player)player.avatarUrl="";saveUsers();socket.emit("accountUpdate",userPayload(user));socket.emit("avatarRemoved",{ok:true});
   });
   socket.on("input",input=>{const p=players.get(socket.id);if(!p)return;if(p.isModerator&&p.spectateTargetId){p.input={up:false,down:false,left:false,right:false,shoot:false};return;}p.input={up:!!input.up,down:!!input.down,left:!!input.left,right:!!input.right,shoot:!!input.shoot&&!p.isInvisible};});
@@ -713,4 +842,21 @@ let last=Date.now();setInterval(()=>{const now=Date.now(),dt=Math.min(.05,(now-l
 
 app.get("*",(req,res)=>res.sendFile(path.join(__dirname,"public","index.html")));
 server.on("error",error=>{if(error.code==="EADDRINUSE")console.error(`Port ${PORT} is already in use. Stop the other game server or start this one with PORT=3001.`);else console.error(error);process.exitCode=1;});
-server.listen(PORT,()=>console.log(`Spasiro by Vector Viper running on port ${PORT}`));
+async function startServer() {
+  await initializeCloudStorage();
+  server.listen(PORT,()=>console.log(`Spasiro by Vector Viper running on port ${PORT}${cloudStorageReady ? " with PostgreSQL storage" : ""}`));
+}
+startServer().catch(error=>{
+  console.error(`[storage] Could not connect to DATABASE_URL; refusing to start without cloud persistence: ${error.message}`);
+  process.exit(1);
+});
+async function stopServer() {
+  try { await io.close(); }
+  catch (error) { console.error(`[shutdown] Socket.IO close failed: ${error.message}`); }
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; writeUsers(); }
+  await Promise.allSettled([...cloudWriteQueues.values()]);
+  if (cloudSql) await cloudSql.end({ timeout: 5 });
+  process.exit(0);
+}
+process.once("SIGTERM", stopServer);
+process.once("SIGINT", stopServer);

@@ -23,6 +23,14 @@ The game server must stay on Render because Vercel Functions do not share this g
 
 `AS`, `US`, and `EU` are currently match-room labels on one host. They are not separate physical regions.
 
-## Accounts and data
+## Persistent cloud storage on Enzonic Deploy
 
-Sign-up uses a username, email, and password. Passwords are stored as salted scrypt hashes; the browser receives a random session token for multiplayer authentication. Sign in again after a server restart. Account data is persisted as JSON on the Render disk. Back up that disk before migrations or manual data changes.
+The game can store account and game state in Enzonic Managed PostgreSQL instead of the temporary filesystem. Create a PostgreSQL database in Enzonic Databases, copy its TLS connection string, and add it to the Deploy project's environment as `DATABASE_URL`. Keep the connection string private; do not put it in this repository. Redeploy after saving the environment variable.
+
+At startup, the server creates its tables and loads the saved state. On a new database it seeds the tables from the JSON data files available to that deployment. Accounts, teams, region codes, store items, redeem codes, direct messages, profile photos, and uploaded sprites are then stored in PostgreSQL. Check `/api/server`; the healthy response should include `"dataPersistent":true` and `"storage":"postgres"`.
+
+The Enzonic free database plan can scale to zero when idle; data remains stored and the next connection wakes the database. That first connection can take longer. The free plan's current limits and backup retention are listed on [Enzonic Databases](https://databases.enzonic.com/).
+
+## Accounts and local data
+
+Sign-up uses a username, email, and password. Passwords are stored as salted scrypt hashes; the browser receives a random session token for multiplayer authentication. Without `DATABASE_URL`, local runs use JSON files under `data/`. For a hosted Enzonic deployment, configure PostgreSQL as described above so accounts survive restarts and redeploys.
