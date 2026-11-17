@@ -471,6 +471,14 @@ app.get("/api/stats", (req, res) => {
     pilots
   });
 });
+// Some hosting adapters dispatch HTTP requests through Express without
+// preserving Socket.IO's request listener. Forward Engine.IO polling requests
+// explicitly so login and registration clients can establish their game socket.
+app.use("/api/socket.io", (req, res, next) => {
+  const query = new URL(req.originalUrl, "http://localhost").searchParams;
+  if (query.get("EIO") !== "4" || !["polling", "websocket"].includes(query.get("transport"))) return next();
+  io.engine.handleRequest(req, res);
+});
 app.use("/api", (req, res) => res.status(404).json({ error: "API endpoint not found" }));
 
 let players = new Map();
