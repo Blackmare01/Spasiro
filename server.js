@@ -108,8 +108,11 @@ function normalizeUsers() {
 normalizeUsers();
 let saveTimer = null;
 function persistJsonFile(file, key, value) {
+  if (cloudSql) {
+    void queueCloudState(key, value).catch(() => {});
+    return;
+  }
   fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
-  if (cloudSql) void queueCloudState(key, value).catch(() => {});
 }
 function writeUsers() { persistJsonFile(USERS_FILE, "users", users); }
 function saveUsers() { clearTimeout(saveTimer); saveTimer = setTimeout(writeUsers, 100); }
@@ -186,12 +189,7 @@ async function initializeCloudStorage() {
     users, store: storeItems, "redeem-codes": redeemCodes, teams,
     "region-codes": regionCodes, "direct-messages": directMessages
   };
-  const localFiles = {
-    users: USERS_FILE, store: STORE_FILE, "redeem-codes": REDEEM_FILE,
-    teams: TEAMS_FILE, "region-codes": REGION_CODES_FILE, "direct-messages": DIRECT_MESSAGES_FILE
-  };
   for (const [key, value] of Object.entries(initialState)) {
-    fs.writeFileSync(localFiles[key], JSON.stringify(value, null, 2), "utf8");
     if (!found.has(key)) await queueCloudState(key, value);
   }
   const storedUploads = new Set((await cloudSql`SELECT url FROM spasiro_uploads`).map(row => row.url));
@@ -479,9 +477,9 @@ app.post("/api/mod/items", moderatorOnly, async (req, res) => {
   if (!width || !height || width > 1024 || height > 1024) return res.status(400).json({ error: "Sprite dimensions must be between 1 and 1024 pixels." });
   const id = crypto.randomBytes(9).toString("hex");
   const filename = `sprite-${id}.png`;
-  fs.writeFileSync(path.join(SPRITE_DIR, filename), image, { flag: "wx" });
+  if (!cloudSql) fs.writeFileSync(path.join(SPRITE_DIR, filename), image, { flag: "wx" });
   try { await persistCloudUpload(`/uploads/${filename}`, image, "image/png"); }
-  catch { try { fs.unlinkSync(path.join(SPRITE_DIR, filename)); } catch {} return res.status(503).json({ error: "Cloud storage could not save this sprite. Please try again." }); }
+  catch { if (!cloudSql) { try { fs.unlinkSync(path.join(SPRITE_DIR, filename)); } catch {} } return res.status(503).json({ error: "Cloud storage could not save this sprite. Please try again." }); }
   const item = { id, name, price, distribution, available: distribution === "shop", imageUrl: `/uploads/${filename}`, width, height, createdAt: Date.now() };
   storeItems.push(item);
   saveStore();
@@ -784,7 +782,7 @@ io.on("connection",socket=>{
     const player=players.get(socket.id),user=findUserByUid(socket.data.uid);if(!user)return fail("Sign in to the game before changing your photo.");
     const match=String(dataUrl||"").match(/^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/);if(!match||match[1].length>600000)return fail("Choose a photo smaller than 450 KB after resizing.");
     const image=Buffer.from(match[1],"base64");if(image.length>450*1024||image.length<4||image[0]!==0xff||image[1]!==0xd8||image[2]!==0xff)return fail("The profile photo must be a valid JPG image.");
-    try{fs.writeFileSync(path.join(PROFILE_DIR,`${user.uid}.jpg`),image);await persistCloudUpload(`/uploads/profiles/${user.uid}.jpg`,image,"image/jpeg");}catch{return fail("Could not save the profile photo on the game server.");}
+    try{if(!cloudSql)fs.writeFileSync(path.join(PROFILE_DIR,`${user.uid}.jpg`),image);await persistCloudUpload(`/uploads/profiles/${user.uid}.jpg`,image,"image/jpeg");}catch{return fail("Could not save the profile photo on the game server.");}
     user.avatarUrl=`/uploads/profiles/${user.uid}.jpg?v=${Date.now()}`;if(player)player.avatarUrl=user.avatarUrl;saveUsers();socket.emit("accountUpdate",userPayload(user));if(typeof ack==="function")ack({ok:true,avatarUrl:user.avatarUrl});
   });
   socket.on("profile:avatarRemove",async ()=>{
