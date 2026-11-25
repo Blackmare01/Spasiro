@@ -1,0 +1,13 @@
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+</IfModule>
+
+<IfModule mod_headers.c>
+  <Files "sw.js">
+    Header set Cache-Control "no-cache"
+  </Files>
+</IfModule>
